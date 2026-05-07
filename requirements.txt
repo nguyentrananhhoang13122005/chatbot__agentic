@@ -1,0 +1,5 @@
+streamlit
+pandas
+langchain
+PyPDF2
+python-dotenv
