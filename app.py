@@ -1,4 +1,19 @@
 import streamlit as st
+import sys
+import importlib
+
+# Bắt buộc reload lại các module để tránh lỗi cache của Streamlit (trả về None do code cũ)
+if "router" in sys.modules:
+    import router
+    importlib.reload(router)
+if "agents.recommender" in sys.modules:
+    from agents import recommender
+    importlib.reload(recommender)
+if "agents.counselor" in sys.modules:
+    from agents import counselor
+    importlib.reload(counselor)
+
+from router import route_query
 
 # 1. CẤU HÌNH TRANG (Bắt buộc phải đứng đầu)
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
@@ -205,17 +220,30 @@ def render_chat_page():
         with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
             st.write(msg["content"])
             
+    # Thêm Widget Tải file CV trực tiếp ở khối Chat
+    uploaded_cv = st.file_uploader("📥 Tải lên CV / Hồ sơ cá nhân (PDF) tại đây:", type=["pdf"])
+    has_file = uploaded_cv is not None
+            
     # Ô nhập liệu chat ở dưới cùng
-    if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
+    if prompt := st.chat_input("Nhập câu hỏi của bạn... (Ví dụ: Em có thể thi NEU không?)"):
         # Lưu tin nhắn người dùng
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # (TODO): Phần này sau sẽ gọi file router.py để AI phân tích và trả lời
-        # Hiện tại trả lời dummy (nhái) để test UI
-        dummy_reply = f"Mô phỏng trả lời cho câu hỏi: '{prompt}' (Chưa kết nối AI)"
-        st.session_state.messages.append({"role": "assistant", "content": dummy_reply})
+        # In ngay lên màn hình dòng user
+        with st.chat_message("user", avatar="👤"):
+            st.write(prompt)
         
-        st.rerun()
+        # Phần cốt lõi (Kết nối tới Router/AI)
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("AI đang suy nghĩ và phân tích..."):
+                # GỌI ĐẾN ROUTER BỘ NÃO TRUNG TÂM (kèm lịch sử hội thoại gần nhất)
+                chat_history = st.session_state.messages[-4:]  # Lấy 4 tin nhắn gần nhất
+                final_response = route_query(user_query=prompt, has_file=has_file, uploaded_file=uploaded_cv, chat_history=chat_history)
+                st.write(final_response)
+                
+        # Lưu câu trả lời của Trợ lý
+        st.session_state.messages.append({"role": "assistant", "content": final_response})
+
 
 # ================= KÍCH HOẠT ỨNG DỤNG =================
 load_custom_css()
