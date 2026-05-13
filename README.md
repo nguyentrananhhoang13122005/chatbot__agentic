@@ -1,5 +1,8 @@
 # 🎓 UniSearch AI — Chatbot Tư Vấn Tuyển Sinh Đại Học
 
+[![Tests](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml/badge.svg)](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+
 Hệ thống AI Chatbot thông minh hỗ trợ tra cứu điểm chuẩn, thông tin tuyển sinh và tư vấn hướng nghiệp cho sinh viên Việt Nam.
 
 ## ✨ Tính năng chính
@@ -107,12 +110,20 @@ Truy cập trình duyệt tại: `http://localhost:8501`
 ## 🧪 Chạy kiểm thử (Testing)
 
 ```bash
-# Chạy toàn bộ 18 test cases
+# Unit Tests — Chạy offline, KHÔNG cần API key (45 test cases)
+python -m pytest tests/test_matcher.py -v
+
+# Unit Tests với Coverage Report
+python -m pytest tests/test_matcher.py --cov=agents --cov-report=term-missing -v
+
+# Gold Tests — CẦN API key + data CSV (18 test cases)
 python tests/run_gold_tests.py
 
-# Chạy 1 test case cụ thể
+# Chạy 1 Gold test case cụ thể
 python tests/run_gold_tests.py --id S08
 ```
+
+> **Lưu ý:** CI/CD (GitHub Actions) chỉ chạy **Unit Tests** tự động. Gold Tests cần chạy thủ công vì yêu cầu API key và dữ liệu.
 
 ---
 

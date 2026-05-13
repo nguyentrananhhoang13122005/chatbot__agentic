@@ -1,0 +1,64 @@
+# ============================================================
+# UniSearch AI — CI Pipeline
+# Chạy unit tests tự động khi push hoặc tạo Pull Request
+# ============================================================
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/test.yml'
+
+jobs:
+  unit-tests:
+    name: Unit Tests (Offline)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: 🧪 Run unit tests
+        run: |
+          python -m pytest tests/test_matcher.py -v --tb=short --co -q 2>/dev/null || true
+          python -m pytest tests/test_matcher.py -v --tb=short
+
+      - name: 📊 Run tests with coverage
+        run: |
+          python -m pytest tests/test_matcher.py \
+            --cov=agents \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            -v --tb=short
+
+      - name: 📤 Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
