@@ -1,5 +1,6 @@
 import streamlit as st
 import sys
+import io
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -119,7 +120,7 @@ def load_custom_css():
         transform: none!important; opacity: 1!important;
         position: relative!important; z-index: 999!important;
     }
-    [data-testid="stSidebar"] > div:first-child { padding-top: var(--sp-16)!important; }
+    [data-testid="stSidebar"] > div:first-child { padding-top: var(--sp-4)!important; }
     [data-testid="stSidebar"] * {
         font-family: var(--font-sans)!important;
         color: var(--text)!important;
@@ -160,22 +161,23 @@ def load_custom_css():
 
     /* === SIDEBAR COMPONENTS === */
     .sb-header {
-        text-align:center; padding:var(--sp-24) var(--sp-16);
+        text-align:center; padding:var(--sp-12) var(--sp-16) var(--sp-12);
         border-bottom:2px solid var(--border);
-        margin:0 calc(var(--sp-16) * -1) var(--sp-24); 
+        margin:0 calc(var(--sp-16) * -1) var(--sp-12); 
         background: var(--surface);
     }
     .sb-header:hover .sb-logo {
         animation: float 2s ease-in-out infinite;
     }
     .sb-logo {
-        font-size:48px; margin-bottom:var(--sp-8);
+        font-size:36px; margin-bottom:var(--sp-4);
         filter: drop-shadow(2px 2px 0px var(--primary));
         display: inline-block;
     }
     .sb-name {
-        font-family:var(--font-sans); font-size:32px; font-weight:800;
+        font-family:var(--font-sans); font-size:24px; font-weight:800;
         color:var(--secondary); letter-spacing:-1px; text-transform: uppercase;
+        margin-bottom: 2px;
     }
     .sb-tag {
         font-family:var(--font-mono);
@@ -186,7 +188,7 @@ def load_custom_css():
     }
     .sb-user {
         background:var(--surface); border-radius:var(--radius-md);
-        padding:var(--sp-12); margin:0 0 var(--sp-24);
+        padding:var(--sp-8); margin:0 0 var(--sp-12);
         border: 2px solid var(--border);
         box-shadow: 3px 3px 0px var(--secondary);
         display:flex; align-items:center; gap:var(--sp-12);
@@ -212,7 +214,7 @@ def load_custom_css():
         font-family: var(--font-mono);
         font-size:14px; font-weight:700; color:var(--text);
         text-transform:uppercase; letter-spacing:1px;
-        margin:var(--sp-32) 0 var(--sp-12) 0;
+        margin:var(--sp-16) 0 var(--sp-8) 0;
         border-bottom: 2px solid var(--border);
         padding-bottom: var(--sp-4);
         display: inline-block;
@@ -519,7 +521,7 @@ def render_home_page():
             của bạn, <span class="hl-blue">ngay hôm nay</span>.
         </h1>
         <p class="desc">
-            Tra cứu điểm chuẩn · So sánh trường · Phân tích CV<br>
+            Tra cứu điểm chuẩn · So sánh trường · Phân tích học bạ<br>
             Tất cả được hỗ trợ bởi trí tuệ nhân tạo.
         </p>
     </div>
@@ -568,8 +570,8 @@ def render_home_page():
         <div class="r-card anim-fade-up anim-delay-4">
             <div class="r-card-num">03</div>
             <div class="r-card-icon pink">✨</div>
-            <div class="r-card-title">Phân tích CV AI</div>
-            <div class="r-card-desc">Tải CV lên, AI đánh giá năng lực và chỉ ra cơ hội.</div>
+            <div class="r-card-title">Phân tích học bạ AI</div>
+            <div class="r-card-desc">Tải học bạ lên, AI đánh giá năng lực và chỉ ra cơ hội.</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -589,7 +591,41 @@ def render_chat_page():
 
     st.markdown('<div class="chat-hdr"><span class="chat-dot"></span> Tuyển sinh AI</div>', unsafe_allow_html=True)
 
-    uploaded_cv = st.file_uploader("📥 Tải lên CV / Hồ sơ (PDF):", type=["pdf"])
+    uploaded_cv_widget = st.file_uploader("📥 Tải lên Học bạ / Hồ sơ (Ảnh hoặc PDF):", type=["jpg", "jpeg", "png", "pdf"])
+
+    # === CACHE FILE VÀO SESSION_STATE ===
+    # BUG FIX: Streamlit giữ widget qua re-render → uploaded_cv_widget.read() lần 2
+    # trả về b'' (stream đã đọc hết) → overwrite cache tốt bằng bytes rỗng.
+    # Giải pháp: chỉ đọc bytes khi file THỰC SỰ MỚI (fingerprint = tên + size).
+    if uploaded_cv_widget is not None:
+        file_fingerprint = f"{uploaded_cv_widget.name}_{uploaded_cv_widget.size}"
+        if st.session_state.get('cached_cv_fingerprint') != file_fingerprint:
+            # File mới hoặc chưa cache → đọc bytes và lưu
+            raw_bytes = uploaded_cv_widget.read()
+            if raw_bytes:  # chỉ lưu nếu đọc được dữ liệu thật
+                st.session_state['cached_cv_bytes']       = raw_bytes
+                st.session_state['cached_cv_name']        = uploaded_cv_widget.name
+                st.session_state['cached_cv_fingerprint'] = file_fingerprint
+                st.success(f"✅ Đã tải lên: **{uploaded_cv_widget.name}** — Sẵn sàng phân tích!")
+        else:
+            # Cùng file, đã cache → chỉ hiển thị thông báo
+            st.success(f"✅ Học bạ đang hoạt động: **{uploaded_cv_widget.name}**")
+
+    # Tái tạo file object từ cache để dùng cho OCR (fresh BytesIO mỗi lần render)
+    uploaded_cv = None
+    if st.session_state.get('cached_cv_bytes'):
+        cv_bytes    = st.session_state['cached_cv_bytes']
+        cv_name     = st.session_state.get('cached_cv_name', 'hocba.jpg')
+        uploaded_cv = io.BytesIO(cv_bytes)
+        uploaded_cv.name = cv_name  # Gắn tên để doc_file() nhận diện đúng định dạng (.jpg/.pdf)
+        if uploaded_cv_widget is None:
+            col_info, col_clear = st.columns([4, 1])
+            col_info.info(f"📎 Đang dùng học bạ đã tải: **{cv_name}**")
+            if col_clear.button("🗑️ Xóa file", key="clear_cv", type="secondary"):
+                for k in ['cached_cv_bytes', 'cached_cv_name', 'cached_cv_fingerprint']:
+                    st.session_state.pop(k, None)
+                st.rerun()
+
 
     if len(st.session_state.messages) == 0 and "pending_query" not in st.session_state:
         with st.chat_message("assistant", avatar="🤖"):
