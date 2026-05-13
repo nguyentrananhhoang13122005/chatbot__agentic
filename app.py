@@ -379,6 +379,10 @@ def load_custom_css():
     [data-testid="stFileUploader"] section {
         border:2px dashed var(--secondary)!important;
         border-radius:var(--radius-md)!important; background:var(--surface)!important;
+        padding: var(--sp-16)!important;
+    }
+    [data-testid="stFileUploader"] section > input {
+        display: none;
     }
     hr { border-color:var(--border)!important; border-width: 2px!important; }
     [data-testid="stMarkdownContainer"] p { color:var(--text); font-size:16px; font-weight: 500;}
