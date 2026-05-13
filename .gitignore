@@ -1,16 +1,37 @@
-# Data and Database files (THÔNG TIN BẢO MẬT CỦA CÔNG TY)
+# ============================================================
+# .gitignore — BẢO MẬT DỮ LIỆU TUYỆT ĐỐI
+# Chỉ đẩy CODE lên GitHub, KHÔNG đẩy dữ liệu nhạy cảm
+# ============================================================
+
+# === DATA & DATABASE (THÔNG TIN BẢO MẬT — TUYỆT ĐỐI KHÔNG PUSH) ===
 data/*.csv
 data/*.xlsx
 data/*.pdf
+data/*.json
+data/1.*/
+data/2.*/
+data/3.*/
+data/4.*/
+data/5.*/
 !data/data_mock.csv
 
-# Environments and Secrets
+# Vector Database (chứa embeddings dữ liệu nhạy cảm)
+vector_db_tuyensinh/
+
+# OCR Tessdata models (file nặng, không cần push)
+tessdata/
+
+# === ENVIRONMENTS & SECRETS (API KEYS, TOKENS) ===
 .env
 .env.local
 .env.*
 !.env.example
 
-# Python
+# === AGENT CONFIG (chứa skills nội bộ) ===
+.agents/
+skills-lock.json
+
+# === PYTHON ===
 __pycache__/
 *.py[cod]
 *$py.class
@@ -35,7 +56,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environments
+# === VIRTUAL ENVIRONMENTS ===
 .venv/
 venv/
 env/
@@ -43,7 +64,13 @@ ENV/
 env.bak/
 venv.bak/
 
-# OS generated files
+# === NODE.JS (next-app) ===
+node_modules/
+next-app/node_modules/
+next-app/.next/
+.next/
+
+# === OS GENERATED FILES ===
 .DS_Store
 .DS_Store?
 ._*
