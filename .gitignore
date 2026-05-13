@@ -35,8 +35,9 @@ SKILL.md
 # === DEBUG & TEMP FILES ===
 debug_*.jpg
 debug_*.png
-test_*.py
+/test_*.py
 !tests/
+!tests/**
 
 # === PYTHON ===
 __pycache__/
