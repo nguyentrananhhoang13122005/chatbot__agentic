@@ -60,6 +60,27 @@ jobs:
         # Bỏ qua thư mục tests
         run: bandit -r . -x ./tests -ll
 
+  # 3. DEPENDENCY CHECK: Quét các thư viện bị dính lỗi bảo mật (CVE)
+  dependency-check:
+    name: Dependency Scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install pip-audit
+        run: pip install pip-audit
+
+      - name: 🛡️ Run pip-audit
+        # Quét file requirements.txt xem có thư viện nào dính mã độc không
+        run: pip-audit -r requirements.txt
+
   # 3. UNIT TESTS: Kiểm tra thuật toán (Đã có sẵn)
   unit-tests:
     name: Unit Tests (Offline)
