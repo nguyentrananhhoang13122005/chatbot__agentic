@@ -1,5 +1,11 @@
+import sys
 import os
 import json
+import re
+
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from agents.recommender import query_diem_chuan
@@ -22,7 +28,12 @@ Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện
    LƯU Ý: Nếu câu hỏi đề cập tới trường/ngành CỤ THỂ (kể cả qua "trường này", "ngành đó") → luôn là RECOMMENDER.
 
 2. TRÍCH XUẤT THỰC THỂ (entities — chỉ cho RECOMMENDER):
-   - school: BẮT BUỘC trả về 2-4 từ khóa TIẾNG VIỆT dùng để tìm kiếm trong cơ sở dữ liệu, cách nhau bằng dấu phẩy. PHẢI DỊCH tên viết tắt tiếng Anh thành tiếng Việt (VD: user gõ "HUST" → trả về "Bách khoa, Hà Nội"; user gõ "NEU" → trả về "Kinh tế, Quốc dân"; user gõ "FTU" → trả về "Ngoại thương"; user gõ "PTIT" → trả về "Bưu chính, Viễn thông, BCVT"; user gõ "HUTECH" → trả về "Công nghệ, TPHCM"). KHÔNG kèm "Đại học", "Học viện", "Trường". Nếu user nói "trường này/trường đó" → dùng lịch sử để xác định tên trường thật. Nếu user gõ tên Việt rõ ràng (VD: "Bách khoa Hà Nội") thì giữ nguyên. Nếu không xác định được → để "ALL".
+   - school: Trả về từ khóa TIẾNG VIỆT ĐÚNG NGUYÊN VĂN những gì user gõ. TUYỆT ĐỐI KHÔNG THÊM ĐỊA DANH nếu user không nói rõ.
+     VD ĐÚNG: user gõ "bách khoa" → trả về "Bách khoa" (KHÔNG thêm Hà Nội).
+     VD ĐÚNG: user gõ "bách khoa hà nội" → trả về "Bách khoa Hà Nội".
+     VD ĐÚNG: user gõ "ngoại thương" → trả về "Ngoại thương".
+     BẮT BUỘC DỊCH viết tắt tiếng Anh thành tiếng Việt: "HUST" → "Bách khoa Hà Nội", "NEU" → "Kinh tế Quốc dân", "FTU" → "Ngoại thương", "PTIT" → "Bưu chính Viễn thông", "UET" → "Công nghệ ĐHQG Hà Nội", "BKU" → "Bách khoa TPHCM".
+     KHÔNG kèm "Đại học", "Học viện", "Trường". Nếu user nói "trường này/trường đó" → dùng lịch sử hội thoại xác định. Nếu không xác định → "ALL".
    - keyword: Tên ngành cụ thể (VD: "công nghệ thông tin"). Nếu user gõ mã ngành dạng số → ghi kèm sau dấu | (VD: "y khoa|7720101"). TUYỆT ĐỐI KHÔNG TỰ BỊA MÃ NGÀNH. Nếu hỏi chung "điểm các ngành" → ghi "điểm|chuẩn".
    - year: Năm cụ thể nếu user đề cập (VD: 2024). Nếu không → 0.
 
@@ -33,10 +44,11 @@ BẮT BUỘC trả về JSON duy nhất, KHÔNG giải thích:
 {"intent": "RECOMMENDER", "school": "...", "keyword": "...", "year": 0, "standalone_query": "..."}"""
 
 
-def route_query(user_query: str, has_file: bool = False, uploaded_file=None, chat_history: list = None):
+# ======== BƯỚC 1: PHÂN LOẠI CÂU HỎI (Classification Only) ========
+def classify_query(user_query: str, has_file: bool = False, chat_history: list = None) -> dict:
     """
-    Unified Analyzer: 1 LLM call thực hiện cả routing + entity extraction + query normalization.
-    Giảm từ 2 API calls xuống 1, nhanh hơn ~50%.
+    Router Section 1: Phân loại câu hỏi và trích xuất thực thể.
+    Chỉ trả về kết quả phân loại (dict), KHÔNG gọi Agent.
     """
     # Xây dựng context từ lịch sử hội thoại
     history_context = ""
@@ -55,56 +67,84 @@ def route_query(user_query: str, has_file: bool = False, uploaded_file=None, cha
 Câu hỏi mới nhất của người dùng: "{user_query}"
 Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không có file"}"""
 
-    try:
-        completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": ANALYZER_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.0,
-            max_tokens=300,
-        )
+    llm_messages = [
+        {"role": "system", "content": ANALYZER_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    
+    for router_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+        try:
+            completion = client.chat.completions.create(
+                messages=llm_messages,
+                model=router_model,
+                temperature=0.0,
+                max_tokens=300,
+            )
 
-        raw_response = completion.choices[0].message.content.strip()
-        
-        # Parse JSON response — xử lý trường hợp LLM wrap trong markdown
-        json_str = raw_response
-        if "```" in json_str:
-            # Trích xuất JSON từ markdown code block
-            import re
-            match = re.search(r'```(?:json)?\s*(.*?)\s*```', json_str, re.DOTALL)
-            if match:
-                json_str = match.group(1)
-        
-        analysis = json.loads(json_str)
-        
-        intent = analysis.get("intent", "RECOMMENDER").upper()
-        school = analysis.get("school", "ALL")
-        keyword = analysis.get("keyword", "ALL")
-        year = analysis.get("year", 0)
-        standalone_query = analysis.get("standalone_query", user_query)
-        
-        print(f"DEBUG [Analyzer]: intent={intent}, school='{school}', keyword='{keyword}', year={year}")
-        print(f"DEBUG [Analyzer]: standalone_query='{standalone_query}'")
-        
-    except Exception as e:
-        print(f"⚠️ Analyzer LLM error: {e}, falling back to defaults")
-        # Fallback: dựa vào heuristic đơn giản
-        intent = "COUNSELOR" if has_file else "RECOMMENDER"
-        school = "ALL"
-        keyword = "ALL"
-        year = 0
-        standalone_query = user_query
+            raw_response = completion.choices[0].message.content.strip()
+            
+            # Parse JSON response — xử lý trường hợp LLM wrap trong markdown
+            json_str = raw_response
+            if "```" in json_str:
+                match = re.search(r'```(?:json)?\s*(.*?)\s*```', json_str, re.DOTALL)
+                if match:
+                    json_str = match.group(1)
+            
+            analysis = json.loads(json_str)
+            
+            result = {
+                "intent": analysis.get("intent", "RECOMMENDER").upper(),
+                "school": analysis.get("school", "ALL"),
+                "keyword": analysis.get("keyword", "ALL"),
+                "year": analysis.get("year", 0),
+                "standalone_query": analysis.get("standalone_query", user_query),
+                "status": "success"
+            }
+            
+            print(f"DEBUG [Router → Classify ({router_model})]: intent={result['intent']}, school='{result['school']}', keyword='{result['keyword']}', year={result['year']}")
+            print(f"DEBUG [Router → Classify]: standalone_query='{result['standalone_query']}'")
+            
+            return result
 
-    # ======== ĐIỀU PHỐI ĐẾN ĐÚNG AGENT ========
+        except Exception as e:
+            print(f"⚠️ Router ({router_model}): {e}")
+            continue
+
+    # Cả 2 model đều lỗi → fallback
+    print("⚠️ Router: All models failed, falling back to defaults")
+    return {
+        "intent": "COUNSELOR" if has_file else "RECOMMENDER",
+        "school": "ALL",
+        "keyword": "ALL",
+        "year": 0,
+        "standalone_query": user_query,
+        "status": "fallback"
+    }
+
+
+# ======== BƯỚC 2: GIAO VIỆC CHO ĐÚNG AGENT (Dispatch Only) ========
+def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None) -> str:
+    """
+    Router Section 2: Dựa trên kết quả phân loại, giao việc cho đúng Agent.
+    - RECOMMENDER → agents/recommender.py (Tra cứu điểm chuẩn)
+    - COUNSELOR  → agents/counselor.py (Tư vấn hướng nghiệp)
+    """
+    intent = classification.get("intent", "RECOMMENDER")
+
     if intent == "COUNSELOR":
         return tu_van_cv(cv_file=uploaded_file, user_query=user_query)
     else:
-        # Truyền entities đã trích xuất → recommender KHÔNG cần gọi LLM nữa
         return query_diem_chuan(
-            user_query=standalone_query,
-            pre_extracted_school=school,
-            pre_extracted_keyword=keyword,
-            pre_extracted_year=year,
+            user_query=classification.get("standalone_query", user_query),
+            pre_extracted_school=classification.get("school", "ALL"),
+            pre_extracted_keyword=classification.get("keyword", "ALL"),
+            pre_extracted_year=classification.get("year", 0),
         )
+
+
+# ======== WRAPPER (Backward compatibility) ========
+def route_query(user_query: str, has_file: bool = False, uploaded_file=None, chat_history: list = None) -> str:
+    """Wrapper gọi classify → dispatch tuần tự."""
+    classification = classify_query(user_query, has_file, chat_history)
+    return dispatch_to_agent(classification, user_query, uploaded_file)
+

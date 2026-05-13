@@ -1,7 +1,14 @@
+import sys
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 import os
 import pdfplumber
 import pandas as pd
 from tqdm import tqdm
+
+# Khắc phục lỗi hiển thị emoji trên Windows
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 def extract_pdf_tables_to_csv(base_folder, output_csv="data/data_tuyensinh.csv"):
     """
