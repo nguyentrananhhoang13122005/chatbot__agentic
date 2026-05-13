@@ -25,6 +25,8 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.11']
+    env:
+      OPENROUTER_API_KEY: "dummy_key_for_testing_only"
 
     steps:
       - name: 📥 Checkout code
