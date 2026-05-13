@@ -38,7 +38,7 @@ Người dùng có đính kèm file CV?: Không có file"""
             {"role": "system", "content": ANALYZER_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        model="llama-3.3-70b-versatile",
+        model="qwen/qwen3-8b",
         temperature=0.0,
         max_tokens=300,
     )

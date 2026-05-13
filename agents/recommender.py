@@ -10,8 +10,8 @@ from openai import OpenAI
 # Tải biến môi trường (override=True bắt buộc nạp key mới nhất bỏ qua cache Terminal)
 load_dotenv(override=True)
 client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
 # --- KHỞI TẠO DATABASE ---
@@ -301,7 +301,7 @@ QUY TẮC TRẢ LỜI:
 7. Sử dụng Markdown (bảng, in đậm, danh sách). Trả lời tiếng Việt, chuyên nghiệp.
 8. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
 
-                for model_2026 in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+                for model_2026 in ["qwen/qwen3-8b", "llama-3.1-8b-instant"]:
                     try:
                         completion = client.chat.completions.create(
                             messages=[{"role": "user", "content": llm_prompt_2026}],
@@ -409,7 +409,7 @@ QUY TẮC TRẢ LỜI:
                 llm_messages = [{"role": "user", "content": llm_prompt}]
                 llm_answer = None
                 
-                for model_name in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+                for model_name in ["qwen/qwen3-8b", "llama-3.1-8b-instant"]:
                     try:
                         completion = client.chat.completions.create(
                             messages=llm_messages,
@@ -569,7 +569,7 @@ DỮ LIỆU:
     try:
         answer_res = client.chat.completions.create(
             messages=[{"role": "user", "content": answer_prompt}],
-            model="llama-3.3-70b-versatile",
+            model="qwen/qwen3-8b",
             temperature=0.1,  # Giảm temperature để LLM bám sát dữ liệu
         ).choices[0].message.content
         return f"🤖 **[Recommender Agent]**\n\n{answer_res}"

@@ -14,8 +14,8 @@ from agents.counselor import tu_van_cv
 # Tải biến môi trường
 load_dotenv(override=True)
 client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
 # ======== UNIFIED ANALYZER: 1 LLM CALL = Routing + Entity Extraction + Query Expansion ========
@@ -72,7 +72,7 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
         {"role": "user", "content": user_message},
     ]
     
-    for router_model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+    for router_model in ["qwen/qwen3-8b"]:
         try:
             completion = client.chat.completions.create(
                 messages=llm_messages,

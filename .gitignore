@@ -30,6 +30,13 @@ tessdata/
 # === AGENT CONFIG (chứa skills nội bộ) ===
 .agents/
 skills-lock.json
+SKILL.md
+
+# === DEBUG & TEMP FILES ===
+debug_*.jpg
+debug_*.png
+test_*.py
+!tests/
 
 # === PYTHON ===
 __pycache__/
