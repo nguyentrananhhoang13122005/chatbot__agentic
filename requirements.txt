@@ -1,5 +1,5 @@
 # === UniSearch AI — Dependencies ===
-streamlit==1.57.0
+streamlit==1.55.0
 pandas==3.0.1
 openai==2.36.0
 python-dotenv==1.2.2

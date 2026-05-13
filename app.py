@@ -63,8 +63,8 @@ def load_custom_css():
         --border: #111827;
         
         /* Typography from DESIGN.md */
-        --font-sans: 'Space Grotesk', sans-serif;
-        --font-mono: 'Overpass Mono', monospace;
+        --font-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --font-mono: 'Overpass Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
         
         /* Rounded & Spacing from DESIGN.md */
         --radius-sm: 4px;
@@ -376,13 +376,40 @@ def load_custom_css():
         border-color:var(--primary)!important;
         box-shadow: 4px 4px 0px var(--primary)!important;
     }
+    /* === FILE UPLOADER (compatible across Streamlit versions) === */
     [data-testid="stFileUploader"] section {
         border:2px dashed var(--secondary)!important;
         border-radius:var(--radius-md)!important; background:var(--surface)!important;
-        padding: var(--sp-16)!important;
+        padding: var(--sp-16) var(--sp-24)!important;
+        min-height: 80px!important;
+        display: flex!important;
+        align-items: center!important;
+        justify-content: center!important;
+        gap: var(--sp-12)!important;
     }
-    [data-testid="stFileUploader"] section > input {
-        display: none;
+    [data-testid="stFileUploader"] section > input { display: none; }
+    [data-testid="stFileUploader"] section button {
+        background: var(--surface)!important;
+        border: 2px solid var(--border)!important;
+        border-radius: var(--radius-sm)!important;
+        padding: var(--sp-8) var(--sp-16)!important;
+        font-weight: 600!important;
+        cursor: pointer!important;
+        white-space: nowrap!important;
+    }
+    [data-testid="stFileUploader"] section button:hover {
+        background: var(--secondary)!important;
+        color: var(--surface)!important;
+    }
+    [data-testid="stFileUploader"] label {
+        font-family: var(--font-sans)!important;
+        font-weight: 600!important;
+        color: var(--text)!important;
+    }
+    [data-testid="stFileUploader"] small {
+        font-family: var(--font-mono)!important;
+        color: var(--text)!important;
+        opacity: 0.6;
     }
     hr { border-color:var(--border)!important; border-width: 2px!important; }
     [data-testid="stMarkdownContainer"] p { color:var(--text); font-size:16px; font-weight: 500;}
@@ -459,9 +486,12 @@ def load_custom_css():
     .badge-dot { animation: pulse-ring 2s infinite; }
 
     """
-    font_link = '<link href="https://fonts.googleapis.com/css2?family=Overpass+Mono:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">'
-    st.markdown(font_link, unsafe_allow_html=True)
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)
+    # Also add robust fallback stack for networks that block Google Fonts
+    font_import = """
+    @import url('https://fonts.googleapis.com/css2?family=Overpass+Mono:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700;800;900&display=swap');
+    """
+    st.markdown(f"<style>{font_import}\n{css}</style>", unsafe_allow_html=True)
 
 
 # === SESSION STATE ===
