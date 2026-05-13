@@ -1,0 +1,15 @@
+[theme]
+# RISO DESIGN SYSTEM — Lock theme colors cho mọi máy
+primaryColor = "#F237A1"
+backgroundColor = "#FDFBF7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#111827"
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
