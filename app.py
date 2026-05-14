@@ -7,7 +7,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 from llm_client import validate_api_key
-from router import classify_query, dispatch_to_agent
+from router import classify_query, dispatch_to_agent_stream
 import session_manager
 
 # Khởi tạo DB
