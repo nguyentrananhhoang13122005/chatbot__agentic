@@ -5,9 +5,15 @@ import io
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+from llm_client import validate_api_key
 from router import classify_query, dispatch_to_agent
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cached_validate_api_key():
+    return validate_api_key()
 
 
 def _process_query(query: str, uploaded_cv=None):
@@ -25,6 +31,8 @@ def _process_query(query: str, uploaded_cv=None):
 
         st.write(f"**Loại câu hỏi:** `{intent}`")
         st.write(f"**Giao cho:** {agent_icon} **{agent_name}**")
+        if classification.get("error_message"):
+            st.warning(classification["error_message"])
         if intent == "RECOMMENDER":
             st.write(f"**Trường:** `{classification.get('school', 'ALL')}` · **Ngành:** `{classification.get('keyword', 'ALL')}` · **Năm:** `{classification.get('year', 0) or 'Không xác định'}`")
 
@@ -707,6 +715,9 @@ def render_chat_page():
 
 # === RENDER ===
 load_custom_css()
+api_key_valid, api_key_error = _cached_validate_api_key()
+if not api_key_valid:
+    st.warning(api_key_error)
 render_sidebar()
 if st.session_state.page == "home":
     render_home_page()
