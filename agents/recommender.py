@@ -432,20 +432,24 @@ QUY TẮC TRẢ LỜI:
             )
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
-    if df_verified is not None and not df_verified.empty and truong != "ALL":
-        list_of_verified_schools = df_verified['Trường'].dropna().unique().tolist()
-        matched_schools = find_matching_schools(truong, list_of_verified_schools)
-
-        print(f"DEBUG [Recommender]: Matched {len(matched_schools)} schools: {matched_schools}")
-
-        # (GUARD đa trường đã xử lý ở GUARD 0 phía trên)
-
-        # ===== GUARD 2: Không tìm thấy trường nào =====
-        if not matched_schools:
-            vf_school = pd.DataFrame()
+    if df_verified is not None and not df_verified.empty:
+        if truong != "ALL":
+            list_of_verified_schools = df_verified['Trường'].dropna().unique().tolist()
+            matched_schools = find_matching_schools(truong, list_of_verified_schools)
+            
+            print(f"DEBUG [Recommender]: Matched {len(matched_schools)} schools: {matched_schools}")
+            
+            # (GUARD đa trường đã xử lý ở GUARD 0 phía trên)
+            
+            # ===== GUARD 2: Không tìm thấy trường nào =====
+            if not matched_schools:
+                vf_school = pd.DataFrame()
+            else:
+                vf_school = df_verified[df_verified['Trường'].isin(matched_schools)].copy()
         else:
-            vf_school = df_verified[df_verified['Trường'].isin(matched_schools)].copy()
-
+            vf_school = df_verified.copy()
+            matched_schools = []
+        
         if not vf_school.empty:
             # --- Lọc theo ngành nếu user chỉ định ---
             vf_match = pd.DataFrame()
@@ -482,14 +486,39 @@ QUY TẮC TRẢ LỜI:
                 vf_match = vf_match.drop(columns=['Năm_Num'], errors='ignore')
 
             if not vf_match.empty:
-                school_name = matched_schools[0]
-
+                school_name = matched_schools[0] if matched_schools else "Nhiều trường"
+                
                 # Bỏ các cột trống hoàn toàn (toàn NaN hoặc rỗng) để LLM và Fallback dễ xử lý
                 vf_match = vf_match.replace('', pd.NA).dropna(axis=1, how='all')
+                
+                # Gửi dữ liệu cho LLM (tối đa 120 dòng)
+                if truong == "ALL" and any(kw in query_lower for kw in ['top', 'cao nhất', 'thấp nhất', 'nhiều nhất', 'ít nhất', 'tốt nhất']):
+                    if 'Điểm chuẩn' in vf_match.columns:
+                        # Convert to numeric
+                        vf_match.loc[:, 'Điểm_Num'] = pd.to_numeric(vf_match['Điểm chuẩn'], errors='coerce')
+                        
+                        # Chỉ lấy những điểm <= 40 (để loại trừ điểm ĐGNL/SAT thường > 100)
+                        vf_thpt = vf_match[vf_match['Điểm_Num'] <= 40].copy()
+                        
+                        if not vf_thpt.empty:
+                            # Lấy top điểm cao nhất của MỖI TRƯỜNG để đảm bảo đa dạng
+                            idx = vf_thpt.groupby('Trường')['Điểm_Num'].idxmax()
+                            best_per_school = vf_thpt.loc[idx]
+                            data_sample = best_per_school.sort_values('Điểm_Num', ascending='thấp' in query_lower).head(120)
+                        else:
+                            data_sample = vf_match.sort_values('Điểm_Num', ascending='thấp' in query_lower).head(120)
+                            
+                        data_sample = data_sample.drop(columns=['Điểm_Num'], errors='ignore')
+                    else:
+                        data_sample = vf_match.head(120)
+                else:
+                    if truong == "ALL":
+                        # Lấy mẫu đa dạng các trường thay vì lấy 120 dòng đầu của 1 trường
+                        data_sample = vf_match.drop_duplicates(subset=['Trường', 'Tên ngành']).head(120)
+                    else:
+                        data_sample = vf_match.head(120)
 
-                # Gửi TẤT CẢ dữ liệu cho LLM (tối đa 120 dòng — đủ cho hầu hết trường)
-                data_sample = vf_match.head(120)
-                export_cols = [c for c in ['Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn'] if c in data_sample.columns]
+                export_cols = [c for c in ['Trường', 'Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn'] if c in data_sample.columns]
                 data_context = data_sample[export_cols].to_csv(index=False, encoding='utf-8')
 
                 # Tóm tắt thống kê
@@ -504,22 +533,20 @@ QUY TẮC TRẢ LỜI:
 
 CÂU HỎI CỦA NGƯỜI DÙNG: "{user_query}"
 
-DỮ LIỆU CHÍNH THỨC CỦA TRƯỜNG {school_name} (dạng CSV):
+DỮ LIỆU CHÍNH THỨC (dạng CSV):
 {data_context}
 
 THỐNG KÊ: {stats}
 
 QUY TẮC TRẢ LỜI:
-1. Trả lời CHÍNH XÁC câu hỏi dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin. Chỉ tập trung trả lời đúng trọng tâm câu hỏi, TUYỆT ĐỐI không đưa ra thông tin thừa.
-2. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường — mọi phương thức xét tuyển đều do trường công bố.
-   Lưu ý: Nhiều trường ở các tỉnh/thành khác (VD: Đà Nẵng, Huế) vẫn CHẤP NHẬN kết quả ĐGNL ĐHQG TPHCM hoặc ĐHQG Hà Nội. Đây là bình thường, KHÔNG phải lỗi dữ liệu.
-3. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC trong dữ liệu và số ngành áp dụng.
-4. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức.
-5. Nếu hỏi chung chung → tóm tắt ngắn gọn.
+1. { "Dựa vào DỮ LIỆU CHÍNH THỨC bên trên để trả lời. TUYỆT ĐỐI KHÔNG bịa thông tin điểm số/chỉ tiêu." if truong != "ALL" else "ĐỐI VỚI CÂU HỎI CHUNG (như xếp hạng top trường, tư vấn chọn trường): Bạn ĐƯỢC PHÉP KẾT HỢP KIẾN THỨC SẴN CÓ của mình và Dữ liệu CSV bên trên để đưa ra câu trả lời TỐT NHẤT. Nếu dữ liệu CSV thiếu sót, hãy dùng kiến thức thực tế của bạn để tư vấn chính xác." }
+2. Chỉ tập trung trả lời đúng trọng tâm câu hỏi.
+3. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC trong dữ liệu.
+4. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức (ưu tiên lấy từ CSV).
+5. Nếu hỏi chung chung (VD: Top 5 trường CNTT) → hãy tổng hợp danh sách các trường uy tín nhất, nêu rõ điểm chuẩn nếu có trong CSV. Nếu CSV không có, hãy tự đưa ra khoảng điểm tham khảo dựa trên kiến thức của bạn.
 6. Sử dụng Markdown (bảng, in đậm, danh sách). Trả lời tiếng Việt, chuyên nghiệp, thân thiện.
-7. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu trong câu trả lời (VD: "Điểm chuẩn **năm 2025**"). Luôn nhấn mạnh năm ở tiêu đề hoặc đoạn mở đầu.
-8. ĐẶC BIỆT LƯU Ý: Nếu người dùng hỏi thông tin KHÔNG CÓ trong bảng dữ liệu (ví dụ: người dùng hỏi "chỉ tiêu" nhưng dữ liệu chỉ có "điểm chuẩn"), BẮT BUỘC phải trả lời rõ: "Rất tiếc, dữ liệu hiện tại của trường này chưa có thông tin đó." TUYỆT ĐỐI KHÔNG tự ý liệt kê toàn bộ điểm chuẩn thay thế khi người dùng không hỏi.
-9. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
+7. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu trong câu trả lời (VD: "Điểm chuẩn **năm 2025**").
+8. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
@@ -542,10 +569,13 @@ QUY TẮC TRẢ LỜI:
                 )
                 if llm_answer:
                     print("DEBUG [Recommender]: LLM OK")
-
+                
+                data_year = int(data_sample['Năm'].mode().iloc[0]) if 'Năm' in data_sample.columns and not data_sample['Năm'].empty else ""
+                
                 if llm_answer:
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
-
+                    school_info = f"Trường: **{school_name}** · " if school_name != "Nhiều trường" else ""
+                    return f"🤖 **[Recommender Agent]** — {school_info}Năm: **{data_year}**\n\n{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
+                
                 # === SMART FALLBACK: Không dùng LLM, phân tích bằng Pandas ===
                 print("DEBUG [Recommender]: All LLM models failed, using smart fallback")
                 ai_warning = f"{llm_error_info['message']}\n\nTôi sẽ trả lời bằng dữ liệu có sẵn.\n\n" if llm_error_info else ""
@@ -553,10 +583,11 @@ QUY TẮC TRẢ LỜI:
 
                 # Nếu người dùng hỏi "chỉ tiêu" nhưng dữ liệu chỉ có "điểm chuẩn"
                 if 'chỉ tiêu' in query_lower and 'Chỉ tiêu' not in vf_match.columns:
+                    school_info = f" của trường này" if school_name != "Nhiều trường" else ""
                     return (
-                        f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                        f"🤖 **[Recommender Agent]**\n\n"
                         f"{ai_warning}"
-                        f"Rất tiếc, dữ liệu hiện tại của trường này chỉ lưu trữ thông tin về **điểm chuẩn** và **phương thức xét tuyển**, chưa có thông tin về **chỉ tiêu**.\n\n"
+                        f"Rất tiếc, dữ liệu hiện tại{school_info} chỉ lưu trữ thông tin về **điểm chuẩn** và **phương thức xét tuyển**, chưa có thông tin về **chỉ tiêu**.\n\n"
                         f"👉 Bạn có thể hỏi tôi về điểm chuẩn của các ngành thay thế nhé!"
                     )
 
@@ -574,13 +605,18 @@ QUY TẮC TRẢ LỜI:
 
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
-                    sorted_df = vf_match.sort_values('Điểm chuẩn', ascending='thấp' in query_lower).head(10)
-                    table = "| Tên ngành | Phương thức | Điểm chuẩn |\n|---|---|---|\n"
+                    if 'Điểm chuẩn' in vf_match.columns:
+                        vf_match.loc[:, 'Điểm_Num'] = pd.to_numeric(vf_match['Điểm chuẩn'], errors='coerce')
+                        sorted_df = vf_match.sort_values('Điểm_Num', ascending='thấp' in query_lower).head(10)
+                    else:
+                        sorted_df = vf_match.head(10)
+                    table = "| Trường | Tên ngành | Phương thức | Điểm chuẩn |\n|---|---|---|---|\n"
                     for _, r in sorted_df.iterrows():
-                        table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"
+                        s_name = r.get('Trường', school_name)
+                        table += f"| {s_name} | {r.get('Tên ngành', '')} | {r.get('Phương thức xét tuyển', '')} | **{r.get('Điểm chuẩn', '')}** |\n"
                     label = "thấp nhất" if 'thấp' in query_lower else "cao nhất"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
-
+                    return f"🤖 **[Recommender Agent]** — **Top kết quả điểm {label}**\n\n{ai_warning}### Top kết quả\n\n{table}"
+                
                 # Fallback cuối: tóm tắt thống kê
                 total = vf_match['Tên ngành'].nunique()
                 methods_list = ", ".join(vf_match['Phương thức xét tuyển'].unique().tolist())
