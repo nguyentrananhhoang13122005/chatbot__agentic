@@ -1,12 +1,17 @@
 import streamlit as st
 import sys
 import io
+from datetime import datetime
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 from llm_client import validate_api_key
 from router import classify_query, dispatch_to_agent_stream
+import session_manager
+
+# Khởi tạo DB
+session_manager.init_db()
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
@@ -502,8 +507,16 @@ def load_custom_css():
 # === SESSION STATE ===
 if "page" not in st.session_state:
     st.session_state.page = "home"
+if "session_id" not in st.session_state:
+    recent = session_manager.get_recent_sessions(1)
+    if recent:
+        st.session_state.session_id = recent[0]["session_id"]
+    else:
+        st.session_state.session_id = session_manager.create_session()
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = session_manager.get_messages(st.session_state.session_id)
+if "show_bookmarked" not in st.session_state:
+    st.session_state.show_bookmarked = False
 
 
 # === SIDEBAR ===
@@ -529,6 +542,7 @@ def render_sidebar():
 
         if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
             st.session_state.page = "home"
+            st.session_state.session_id = session_manager.create_session()
             st.session_state.messages = []
             st.rerun()
 
@@ -537,9 +551,74 @@ def render_sidebar():
             st.rerun()
 
         st.markdown('<div class="sb-section">Lịch sử gần đây</div>', unsafe_allow_html=True)
-        st.button("Bách Khoa vs KHTN", use_container_width=True, type="secondary")
-        st.button("Ngành Marketing", use_container_width=True, type="secondary")
-        st.button("Mục đã lưu", use_container_width=True, type="secondary")
+        recent_sessions = session_manager.get_recent_sessions(10)
+        for sess in recent_sessions:
+            icon = "⭐ " if sess["is_bookmarked"] else "💬 "
+            try:
+                dt = datetime.strptime(sess["updated_at"], "%Y-%m-%d %H:%M:%S")
+                date_str = dt.strftime("%d/%m/%Y")
+                display_title = f"{sess['title']} ({date_str})"
+            except:
+                display_title = sess['title']
+                
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                if st.button(icon + display_title, key=f"sess_{sess['session_id']}", use_container_width=True, type="secondary"):
+                    st.session_state.session_id = sess["session_id"]
+                    st.session_state.messages = session_manager.get_messages(sess["session_id"])
+                    st.session_state.page = "chat"
+                    st.rerun()
+            with col2:
+                if st.button("🗑️", key=f"del_{sess['session_id']}", use_container_width=True, help="Xóa phiên này"):
+                    session_manager.delete_session(sess["session_id"])
+                    if st.session_state.session_id == sess["session_id"]:
+                        st.session_state.session_id = session_manager.create_session()
+                        st.session_state.messages = []
+                        st.session_state.page = "home"
+                    st.rerun()
+
+        if recent_sessions:
+            if st.button("🗑️ Xóa tất cả lịch sử", use_container_width=True, type="secondary"):
+                session_manager.delete_all_sessions()
+                st.session_state.session_id = session_manager.create_session()
+                st.session_state.messages = []
+                st.session_state.page = "home"
+                st.rerun()
+
+        st.markdown('<div class="sb-section">Mục đã lưu</div>', unsafe_allow_html=True)
+        if st.button("⭐ Xem phiên đã lưu", use_container_width=True, type="secondary"):
+            st.session_state.show_bookmarked = not st.session_state.show_bookmarked
+            st.rerun()
+
+        if st.session_state.show_bookmarked:
+            bookmarked = session_manager.get_bookmarked_sessions()
+            if not bookmarked:
+                st.caption("Chưa có phiên nào được lưu.")
+            else:
+                for sess in bookmarked:
+                    try:
+                        dt = datetime.strptime(sess["updated_at"], "%Y-%m-%d %H:%M:%S")
+                        date_str = dt.strftime("%d/%m/%Y")
+                        display_title = f"{sess['title']} ({date_str})"
+                    except:
+                        display_title = sess['title']
+                        
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        if st.button(f"⭐ {display_title}", key=f"bm_{sess['session_id']}", use_container_width=True, type="secondary"):
+                            st.session_state.session_id = sess["session_id"]
+                            st.session_state.messages = session_manager.get_messages(sess["session_id"])
+                            st.session_state.page = "chat"
+                            st.session_state.show_bookmarked = False
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️", key=f"del_bm_{sess['session_id']}", use_container_width=True, help="Xóa phiên này"):
+                            session_manager.delete_session(sess["session_id"])
+                            if st.session_state.session_id == sess["session_id"]:
+                                st.session_state.session_id = session_manager.create_session()
+                                st.session_state.messages = []
+                                st.session_state.page = "home"
+                            st.rerun()
 
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
         st.button("Cài đặt", use_container_width=True, type="secondary")
@@ -628,7 +707,14 @@ def render_chat_page():
         st.session_state.page = "home"
         st.rerun()
 
-    st.markdown('<div class="chat-hdr"><span class="chat-dot"></span> Tuyển sinh AI</div>', unsafe_allow_html=True)
+    c_hdr, c_bm = st.columns([5, 1])
+    with c_hdr:
+        st.markdown('<div class="chat-hdr"><span class="chat-dot"></span> Tuyển sinh AI</div>', unsafe_allow_html=True)
+    with c_bm:
+        is_bm = session_manager.is_bookmarked(st.session_state.session_id)
+        if st.button("🌟 Bỏ lưu" if is_bm else "⭐ Lưu phiên", use_container_width=True, type="secondary" if not is_bm else "primary"):
+            session_manager.toggle_bookmark(st.session_state.session_id)
+            st.rerun()
 
     uploaded_cv_widget = st.file_uploader("📥 Tải lên Học bạ / Hồ sơ (Ảnh hoặc PDF):", type=["jpg", "jpeg", "png", "pdf"])
 
@@ -693,21 +779,36 @@ def render_chat_page():
     if "pending_query" in st.session_state:
         pending = st.session_state.pending_query
         del st.session_state.pending_query
+        
         st.session_state.messages.append({"role": "user", "content": pending})
+        session_manager.add_message(st.session_state.session_id, "user", pending)
+        if len(st.session_state.messages) == 1:
+            title = pending[:30] + ("..." if len(pending) > 30 else "")
+            session_manager.update_session_title(st.session_state.session_id, title)
+            
         with st.chat_message("user", avatar="👤"):
             st.write(pending)
         with st.chat_message("assistant", avatar="🤖"):
             response = _process_query(pending, uploaded_cv)
         st.session_state.messages.append({"role": "assistant", "content": response})
+        session_manager.add_message(st.session_state.session_id, "assistant", response)
+        st.rerun()
 
     # Xử lý câu hỏi nhập từ ô chat
     if prompt := st.chat_input("Nhập câu hỏi... (VD: Điểm chuẩn Bách Khoa 2024?)"):
         st.session_state.messages.append({"role": "user", "content": prompt})
+        session_manager.add_message(st.session_state.session_id, "user", prompt)
+        if len(st.session_state.messages) == 1:
+            title = prompt[:30] + ("..." if len(prompt) > 30 else "")
+            session_manager.update_session_title(st.session_state.session_id, title)
+            
         with st.chat_message("user", avatar="👤"):
             st.write(prompt)
         with st.chat_message("assistant", avatar="🤖"):
             response = _process_query(prompt, uploaded_cv)
         st.session_state.messages.append({"role": "assistant", "content": response})
+        session_manager.add_message(st.session_state.session_id, "assistant", response)
+        st.rerun()
 
 
 # === RENDER ===
