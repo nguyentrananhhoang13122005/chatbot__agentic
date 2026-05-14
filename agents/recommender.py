@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
-from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
 
 # --- KHỞI TẠO DATABASE ---
 # Load Data một lần duy nhất vào RAM khi ứng dụng khởi chạy (tăng tốc độ phản hồi)
@@ -227,7 +227,21 @@ def clean_ocr_for_llm(filtered_df: pd.DataFrame) -> str:
     return result
 
 # ======== HÀM CHÍNH ========
-def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0) -> str:
+def _stream_llm_response(prefix: str, messages: list, temperature: float = 0.1, max_tokens: int | None = None, suffix: str = ""):
+    if prefix:
+        yield prefix
+    for chunk in call_llm_stream(
+        messages=messages,
+        model=OPENROUTER_FALLBACK_MODELS[0],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    ):
+        yield chunk
+    if suffix:
+        yield suffix
+
+
+def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False) -> str:
     if df_tuyensinh is None or df_tuyensinh.empty:
         return "⚠️ Dữ liệu tuyển sinh chưa sẵn sàng. Hãy đảm bảo file tiến trình ETL đã cào dữ liệu thành công."
 
@@ -292,6 +306,15 @@ QUY TẮC TRẢ LỜI:
 6. Nếu người dùng hỏi về ĐIỂM CHUẨN nhưng dữ liệu 2026 chưa có → nói rõ: "Điểm chuẩn năm 2026 chưa được công bố. Dữ liệu hiện có là đề án tuyển sinh 2026."
 7. Sử dụng Markdown (bảng, in đậm, danh sách). Trả lời tiếng Việt, chuyên nghiệp.
 8. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
+
+                if stream_output:
+                    return _stream_llm_response(
+                        prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n",
+                        messages=[{"role": "user", "content": llm_prompt_2026}],
+                        temperature=0.1,
+                        max_tokens=3000,
+                        suffix="\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*",
+                    )
 
                 llm_answer, llm_error_info = call_llm(
                     messages=[{"role": "user", "content": llm_prompt_2026}],
@@ -401,6 +424,17 @@ QUY TẮC TRẢ LỜI:
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
+                data_year = int(data_sample['Năm'].mode().iloc[0]) if 'Năm' in data_sample.columns else ""
+
+                if stream_output:
+                    return _stream_llm_response(
+                        prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
+                        messages=llm_messages,
+                        temperature=0.1,
+                        max_tokens=3000,
+                        suffix=f"\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*",
+                    )
+
                 llm_answer, llm_error_info = call_llm(
                     messages=llm_messages,
                     model_list=OPENROUTER_FALLBACK_MODELS,
@@ -409,8 +443,6 @@ QUY TẮC TRẢ LỜI:
                 )
                 if llm_answer:
                     print("DEBUG [Recommender]: LLM OK")
-                
-                data_year = int(data_sample['Năm'].mode().iloc[0]) if 'Năm' in data_sample.columns else ""
                 
                 if llm_answer:
                     return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
@@ -555,6 +587,13 @@ QUY TẮC OUTPUT BẮT BUỘC:
 DỮ LIỆU:
 {context_data}"""
     
+    if stream_output:
+        return _stream_llm_response(
+            prefix="🤖 **[Recommender Agent]**\n\n",
+            messages=[{"role": "user", "content": answer_prompt}],
+            temperature=0.1,
+        )
+
     answer_res, error_info = call_llm(
         messages=[{"role": "user", "content": answer_prompt}],
         model_list=OPENROUTER_FALLBACK_MODELS,
@@ -563,3 +602,17 @@ DỮ LIỆU:
     if answer_res:
         return f"🤖 **[Recommender Agent]**\n\n{answer_res}"
     return f"🤖 **[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
+
+
+def query_diem_chuan_stream(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0):
+    response = query_diem_chuan(
+        user_query=user_query,
+        pre_extracted_school=pre_extracted_school,
+        pre_extracted_keyword=pre_extracted_keyword,
+        pre_extracted_year=pre_extracted_year,
+        stream_output=True,
+    )
+    if isinstance(response, str):
+        yield response
+        return
+    yield from response
