@@ -57,8 +57,8 @@ jobs:
 
       - name: 🛡️ Run Bandit
         # Quét lỗ hổng bảo mật cấp độ Trung bình (Medium) & Cao (High)
-        # Bỏ qua thư mục tests
-        run: bandit -r . -x ./tests -ll
+        # Bỏ qua thư mục tests và các thư mục cấu hình tooling (.agent, .cursor)
+        run: bandit -r . -x ./tests,./.agent,./.cursor -ll
 
   # 3. DEPENDENCY CHECK: Quét các thư viện bị dính lỗi bảo mật (CVE)
   dependency-check:
