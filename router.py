@@ -1,22 +1,13 @@
 import sys
-import os
 import json
 import re
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
-from dotenv import load_dotenv
-from openai import OpenAI
 from agents.recommender import query_diem_chuan
 from agents.counselor import tu_van_cv
-
-# Tải biến môi trường
-load_dotenv(override=True)
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
 
 # ======== UNIFIED ANALYZER: 1 LLM CALL = Routing + Entity Extraction + Query Expansion ========
 ANALYZER_PROMPT = """Bạn là BỘ PHÂN TÍCH TRUNG TÂM (Analyzer) cho Hệ thống AI Tư vấn Tuyển sinh Đại học.
@@ -72,17 +63,15 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
         {"role": "user", "content": user_message},
     ]
     
-    for router_model in ["qwen/qwen3-8b"]:
-        try:
-            completion = client.chat.completions.create(
-                messages=llm_messages,
-                model=router_model,
-                temperature=0.0,
-                max_tokens=300,
-            )
+    raw_response, error_info = call_llm(
+        messages=llm_messages,
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.0,
+        max_tokens=300,
+    )
 
-            raw_response = completion.choices[0].message.content.strip()
-            
+    if raw_response:
+        try:
             # Parse JSON response — xử lý trường hợp LLM wrap trong markdown
             json_str = raw_response
             if "```" in json_str:
@@ -101,14 +90,17 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
                 "status": "success"
             }
             
-            print(f"DEBUG [Router → Classify ({router_model})]: intent={result['intent']}, school='{result['school']}', keyword='{result['keyword']}', year={result['year']}")
+            print(f"DEBUG [Router → Classify]: intent={result['intent']}, school='{result['school']}', keyword='{result['keyword']}', year={result['year']}")
             print(f"DEBUG [Router → Classify]: standalone_query='{result['standalone_query']}'")
             
             return result
 
         except Exception as e:
-            print(f"⚠️ Router ({router_model}): {e}")
-            continue
+            print(f"⚠️ Router parse error: {e}")
+            error_info = {
+                "message": "⚠️ Router AI trả về dữ liệu không hợp lệ. Hệ thống sẽ dùng phân loại mặc định.",
+                "detail": str(e),
+            }
 
     # Cả 2 model đều lỗi → fallback
     print("⚠️ Router: All models failed, falling back to defaults")
@@ -118,7 +110,8 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
         "keyword": "ALL",
         "year": 0,
         "standalone_query": user_query,
-        "status": "fallback"
+        "status": "fallback",
+        "error_message": error_info["message"] if error_info else "⚠️ Router AI tạm thời không khả dụng. Hệ thống sẽ dùng phân loại mặc định."
     }
 
 

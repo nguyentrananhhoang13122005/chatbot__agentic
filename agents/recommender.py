@@ -4,15 +4,7 @@ import pandas as pd
 import sys
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
-from dotenv import load_dotenv
-from openai import OpenAI
-
-# Tải biến môi trường (override=True bắt buộc nạp key mới nhất bỏ qua cache Terminal)
-load_dotenv(override=True)
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
 
 # --- KHỞI TẠO DATABASE ---
 # Load Data một lần duy nhất vào RAM khi ứng dụng khởi chạy (tăng tốc độ phản hồi)
@@ -301,19 +293,21 @@ QUY TẮC TRẢ LỜI:
 7. Sử dụng Markdown (bảng, in đậm, danh sách). Trả lời tiếng Việt, chuyên nghiệp.
 8. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
 
-                for model_2026 in ["qwen/qwen3-8b", "llama-3.1-8b-instant"]:
-                    try:
-                        completion = client.chat.completions.create(
-                            messages=[{"role": "user", "content": llm_prompt_2026}],
-                            model=model_2026,
-                            temperature=0.1,
-                            max_tokens=3000,
-                        )
-                        llm_answer = completion.choices[0].message.content.strip()
-                        return f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n{llm_answer}\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*"
-                    except Exception as e:
-                        print(f"DEBUG [2026 LLM {model_2026}]: {e}")
-                        continue
+                llm_answer, llm_error_info = call_llm(
+                    messages=[{"role": "user", "content": llm_prompt_2026}],
+                    model_list=OPENROUTER_FALLBACK_MODELS,
+                    temperature=0.1,
+                    max_tokens=3000,
+                )
+                if llm_answer:
+                    return f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n{llm_answer}\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*"
+                if llm_error_info:
+                    return (
+                        f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n"
+                        f"{llm_error_info['message']}\n\n"
+                        f"Tôi đã tìm thấy dữ liệu tuyển sinh năm 2026 của trường này, nhưng hiện chưa thể tổng hợp bằng AI. "
+                        f"Vui lòng thử lại sau vài phút."
+                    )
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
     if df_verified is not None and not df_verified.empty and truong != "ALL":
@@ -407,22 +401,14 @@ QUY TẮC TRẢ LỜI:
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
-                llm_answer = None
-                
-                for model_name in ["qwen/qwen3-8b", "llama-3.1-8b-instant"]:
-                    try:
-                        completion = client.chat.completions.create(
-                            messages=llm_messages,
-                            model=model_name,
-                            temperature=0.1,
-                            max_tokens=3000,
-                        )
-                        llm_answer = completion.choices[0].message.content.strip()
-                        print(f"DEBUG [Recommender]: LLM OK with {model_name}")
-                        break
-                    except Exception as e:
-                        print(f"DEBUG [Recommender LLM {model_name}]: {e}")
-                        continue
+                llm_answer, llm_error_info = call_llm(
+                    messages=llm_messages,
+                    model_list=OPENROUTER_FALLBACK_MODELS,
+                    temperature=0.1,
+                    max_tokens=3000,
+                )
+                if llm_answer:
+                    print("DEBUG [Recommender]: LLM OK")
                 
                 data_year = int(data_sample['Năm'].mode().iloc[0]) if 'Năm' in data_sample.columns else ""
                 
@@ -431,12 +417,14 @@ QUY TẮC TRẢ LỜI:
                 
                 # === SMART FALLBACK: Không dùng LLM, phân tích bằng Pandas ===
                 print("DEBUG [Recommender]: All LLM models failed, using smart fallback")
+                ai_warning = f"{llm_error_info['message']}\n\nTôi sẽ trả lời bằng dữ liệu có sẵn.\n\n" if llm_error_info else ""
                 query_lower = user_query.lower()
                 
                 # Nếu người dùng hỏi "chỉ tiêu" nhưng dữ liệu chỉ có "điểm chuẩn"
                 if 'chỉ tiêu' in query_lower and 'Chỉ tiêu' not in vf_match.columns:
                     return (
                         f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                        f"{ai_warning}"
                         f"Rất tiếc, dữ liệu hiện tại của trường này chỉ lưu trữ thông tin về **điểm chuẩn** và **phương thức xét tuyển**, chưa có thông tin về **chỉ tiêu**.\n\n"
                         f"👉 Bạn có thể hỏi tôi về điểm chuẩn của các ngành thay thế nhé!"
                     )
@@ -451,7 +439,7 @@ QUY TẮC TRẢ LỜI:
                     table = "| Phương thức | Số ngành | Điểm thấp nhất | Điểm cao nhất |\n|---|---|---|---|\n"
                     for _, r in methods.iterrows():
                         table += f"| **{r['Phương thức xét tuyển']}** | {r['Số_ngành']} | {r['Điểm_thấp']} | {r['Điểm_cao']} |\n"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n### Các phương thức xét tuyển\n\n{table}"
+                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Các phương thức xét tuyển\n\n{table}"
                 
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
@@ -460,13 +448,14 @@ QUY TẮC TRẢ LỜI:
                     for _, r in sorted_df.iterrows():
                         table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"
                     label = "thấp nhất" if 'thấp' in query_lower else "cao nhất"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n### Top 10 ngành điểm {label}\n\n{table}"
+                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
                 
                 # Fallback cuối: tóm tắt thống kê
                 total = vf_match['Tên ngành'].nunique()
                 methods_list = ", ".join(vf_match['Phương thức xét tuyển'].unique().tolist())
                 return (
                     f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                    f"{ai_warning}"
                     f"Trường có **{total} ngành** tuyển sinh theo phương thức: {methods_list}.\n\n"
                     f"👉 Hãy hỏi cụ thể hơn để tôi cung cấp thông tin chính xác!\n"
                     f"VD: *\"điểm chuẩn ngành CNTT {school_name}\"* hoặc *\"phương thức tuyển sinh {school_name}\"*"
@@ -566,12 +555,11 @@ QUY TẮC OUTPUT BẮT BUỘC:
 DỮ LIỆU:
 {context_data}"""
     
-    try:
-        answer_res = client.chat.completions.create(
-            messages=[{"role": "user", "content": answer_prompt}],
-            model="qwen/qwen3-8b",
-            temperature=0.1,  # Giảm temperature để LLM bám sát dữ liệu
-        ).choices[0].message.content
+    answer_res, error_info = call_llm(
+        messages=[{"role": "user", "content": answer_prompt}],
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.1,
+    )
+    if answer_res:
         return f"🤖 **[Recommender Agent]**\n\n{answer_res}"
-    except Exception as e:
-        return f"⚠️ Lỗi suy luận AI: {e}"
+    return f"🤖 **[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
