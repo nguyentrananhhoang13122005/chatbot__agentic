@@ -275,6 +275,8 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
     query_lower = user_query.lower()
     is_score_query = any(kw in query_lower for kw in ['điểm chuẩn', 'điểm', 'bao nhiêu điểm', 'điểm trúng tuyển'])
     is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký'])
+    school_2026 = ""
+    llm_prompt_2026 = ""
     
     # ======== BƯỚC 1: TRA CỨU DATS 2026 (cho câu hỏi tuyển sinh) ========
     # Chỉ dùng 2026 khi: (1) KHÔNG hỏi điểm chuẩn, hoặc (2) hỏi tuyển sinh/phương thức
@@ -306,27 +308,30 @@ QUY TẮC TRẢ LỜI:
 6. Nếu người dùng hỏi về ĐIỂM CHUẨN nhưng dữ liệu 2026 chưa có → nói rõ: "Điểm chuẩn năm 2026 chưa được công bố. Dữ liệu hiện có là đề án tuyển sinh 2026."
 7. Sử dụng Markdown (bảng, in đậm, danh sách). Trả lời tiếng Việt, chuyên nghiệp.
 8. Ở cuối câu trả lời, LUÔN đề xuất 2-3 câu hỏi chủ đề liên quan để người dùng có thể hỏi tiếp."""
+                prefix_2026 = f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n"
+                messages_2026 = [{"role": "user", "content": llm_prompt_2026}]
+                suffix_2026 = "\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*"
 
                 if stream_output:
                     return _stream_llm_response(
-                        prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n",
-                        messages=[{"role": "user", "content": llm_prompt_2026}],
+                        prefix=prefix_2026,
+                        messages=messages_2026,
                         temperature=0.1,
                         max_tokens=3000,
-                        suffix="\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*",
+                        suffix=suffix_2026,
                     )
 
                 llm_answer, llm_error_info = call_llm(
-                    messages=[{"role": "user", "content": llm_prompt_2026}],
+                    messages=messages_2026,
                     model_list=OPENROUTER_FALLBACK_MODELS,
                     temperature=0.1,
                     max_tokens=3000,
                 )
                 if llm_answer:
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n{llm_answer}\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm 2026.*"
+                    return f"{prefix_2026}{llm_answer}{suffix_2026}"
                 if llm_error_info:
                     return (
-                        f"🤖 **[Recommender Agent]** — Trường: **{school_2026}** · Năm: **2026**\n\n"
+                        f"{prefix_2026}"
                         f"{llm_error_info['message']}\n\n"
                         f"Tôi đã tìm thấy dữ liệu tuyển sinh năm 2026 của trường này, nhưng hiện chưa thể tổng hợp bằng AI. "
                         f"Vui lòng thử lại sau vài phút."
