@@ -157,3 +157,62 @@ def call_llm(
             break
 
     return None, last_error or _build_error_info("unknown")
+
+
+def call_llm_stream(
+    messages: list,
+    model: str | None = None,
+    temperature: float = 0.1,
+    max_tokens: int | None = None,
+):
+    if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.strip():
+        yield FRIENDLY_ERROR_MESSAGES["missing_api_key"]
+        return
+
+    model_name = model or OPENROUTER_FALLBACK_MODELS[0]
+    yielded_any = False
+
+    try:
+        request_kwargs = {
+            "messages": messages,
+            "model": model_name,
+            "temperature": temperature,
+            "stream": True,
+        }
+        if max_tokens is not None:
+            request_kwargs["max_tokens"] = max_tokens
+
+        stream = client.chat.completions.create(**request_kwargs)
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yielded_any = True
+                yield chunk.choices[0].delta.content
+
+        if not yielded_any:
+            content, error_info = call_llm(
+                messages=messages,
+                model_list=OPENROUTER_FALLBACK_MODELS,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            if content:
+                yield content
+            elif error_info:
+                yield error_info["message"]
+
+    except Exception as error:
+        print(f"ERROR [LLM Stream {model_name}]: {error}")
+        if yielded_any:
+            yield "\n\n⚠️ Kết nối AI bị gián đoạn trong lúc truyền dữ liệu. Vui lòng thử lại nếu câu trả lời chưa đầy đủ."
+            return
+
+        content, error_info = call_llm(
+            messages=messages,
+            model_list=OPENROUTER_FALLBACK_MODELS,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if content:
+            yield content
+        elif error_info:
+            yield error_info["message"]
