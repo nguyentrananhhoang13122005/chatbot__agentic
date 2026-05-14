@@ -4,6 +4,7 @@ pandas==2.2.3
 openai==2.36.0
 python-dotenv==1.2.2
 PyPDF2==3.0.1
+PyMuPDF
 Pillow==12.2.0
 numpy
 easyocr==1.7.2
