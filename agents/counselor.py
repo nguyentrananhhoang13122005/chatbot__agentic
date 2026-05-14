@@ -4,21 +4,11 @@ import sys
 import numpy as np
 import pandas as pd
 import cv2
-from dotenv import load_dotenv
-from openai import OpenAI
 from PIL import Image, ImageEnhance
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
-
-# Tải file .env từ môi trường (override=True bắt buộc nạp key mới)
-load_dotenv(override=True)
-
-# Khởi tạo client OpenRouter
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
 
 # === LAZY OCR READER (chỉ khởi tạo khi cần, model đã tải sẵn ở ~/.EasyOCR/model/) ===
 _ocr_reader = None
@@ -283,22 +273,21 @@ Chỉ trả về bảng Markdown theo định dạng này, KHÔNG giải thích 
 | Toán | 8.5 |
 ..."""
 
-    try:
-        resp = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": PARSE_PROMPT},
-                {"role": "user",   "content": f"VĂN BẢN OCR THÔ:\n{raw_ocr_text}"}
-            ],
-            model="qwen/qwen3-8b",
-            temperature=0.0,
-            max_tokens=800,
-        )
-        parsed = resp.choices[0].message.content.strip()
+    parsed, error_info = call_llm(
+        messages=[
+            {"role": "system", "content": PARSE_PROMPT},
+            {"role": "user",   "content": f"VĂN BẢN OCR THÔ:\n{raw_ocr_text}"}
+        ],
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.0,
+        max_tokens=800,
+    )
+    if parsed:
         print(f"DEBUG [LLM Parser]: Parsed {len(parsed)} chars")
         return parsed
-    except Exception as e:
-        print(f"ERROR [LLM Parser]: {e}")
-        return raw_ocr_text  # fallback: dùng raw text nếu parser lỗi
+    if error_info:
+        print(f"ERROR [LLM Parser]: {error_info['message']} {error_info.get('detail', '')}")
+    return raw_ocr_text  # fallback: dùng raw text nếu parser lỗi
 
 
 # ======== TOOL 2: TRUY XUAT DATABASE ========
@@ -372,16 +361,15 @@ Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đ
 """
 
     # 4. Gọi LLM phân tích và tư vấn
-    try:
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_query}
-            ],
-            model="qwen/qwen3-8b",
-            temperature=0.3,
-            max_tokens=2000,
-        )
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        return f"⚠️ Lỗi kết nối AI: {str(e)}"
+    answer, error_info = call_llm(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_query}
+        ],
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.3,
+        max_tokens=2000,
+    )
+    if answer:
+        return answer
+    return f"🤖 **[Counselor Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"

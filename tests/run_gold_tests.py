@@ -16,7 +16,8 @@ from tests.gold_queries import GOLD_QUERIES
 
 def run_analyzer_only(query: str, chat_history: list = None) -> dict:
     """Chạy Analyzer LLM call trực tiếp, trả về JSON parsed."""
-    from router import client, ANALYZER_PROMPT
+    from router import ANALYZER_PROMPT
+    from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
 
     history_context = ""
     if chat_history:
@@ -33,17 +34,18 @@ def run_analyzer_only(query: str, chat_history: list = None) -> dict:
 Câu hỏi mới nhất của người dùng: "{query}"
 Người dùng có đính kèm file CV?: Không có file"""
 
-    completion = client.chat.completions.create(
+    raw, error_info = call_llm(
         messages=[
             {"role": "system", "content": ANALYZER_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        model="qwen/qwen3-8b",
+        model_list=OPENROUTER_FALLBACK_MODELS,
         temperature=0.0,
         max_tokens=300,
     )
+    if not raw:
+        raise RuntimeError(error_info["message"] if error_info else "Analyzer LLM unavailable")
 
-    raw = completion.choices[0].message.content.strip()
     json_str = raw
     if "```" in json_str:
         match = re.search(r'```(?:json)?\s*(.*?)\s*```', json_str, re.DOTALL)
@@ -55,7 +57,7 @@ Người dùng có đính kèm file CV?: Không có file"""
 
 def run_school_match(school_query: str, use_verified: bool = False) -> str:
     """Chạy Hybrid Matcher trên school_query."""
-    from agents.recommender import find_best_school_match
+    from agents.recommender import find_matching_schools
     import pandas as pd
 
     if use_verified:
@@ -65,7 +67,8 @@ def run_school_match(school_query: str, use_verified: bool = False) -> str:
         df = pd.read_csv('data/data_tuyensinh_clean.csv', low_memory=False).fillna('')
         schools = df['Tên Trường'].dropna().unique().tolist()
 
-    return find_best_school_match(school_query, schools)
+    matches = find_matching_schools(school_query, schools)
+    return matches[0] if matches else None
 
 
 def evaluate(tc: dict, analyzer_result: dict, matched_school: str) -> dict:
