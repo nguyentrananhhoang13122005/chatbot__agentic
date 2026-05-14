@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import cv2
 from PIL import Image, ImageEnhance
-from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -309,7 +309,7 @@ def retrieve_main_data() -> str:
 
 
 # ======== HAM CHINH: TU VAN HUONG NGHIEP ========
-def tu_van_cv(cv_file, user_query: str) -> str:
+def tu_van_cv(cv_file, user_query: str, stream_output: bool = False) -> str:
     # 1. Tool 1: Đọc file (OCR ảnh hoặc parse PDF)
     score_table = ""
     if cv_file is not None:
@@ -361,6 +361,17 @@ Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đ
 """
 
     # 4. Gọi LLM phân tích và tư vấn
+    if stream_output:
+        return call_llm_stream(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_query}
+            ],
+            model=OPENROUTER_FALLBACK_MODELS[0],
+            temperature=0.3,
+            max_tokens=2000,
+        )
+
     answer, error_info = call_llm(
         messages=[
             {"role": "system", "content": system_prompt},
@@ -373,3 +384,11 @@ Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đ
     if answer:
         return answer
     return f"🤖 **[Counselor Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
+
+
+def tu_van_cv_stream(cv_file, user_query: str):
+    response = tu_van_cv(cv_file=cv_file, user_query=user_query, stream_output=True)
+    if isinstance(response, str):
+        yield response
+        return
+    yield from response

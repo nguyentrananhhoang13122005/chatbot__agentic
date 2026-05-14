@@ -10,6 +10,7 @@ Hệ thống AI Chatbot thông minh hỗ trợ tra cứu điểm chuẩn, thông
 - **Tra cứu điểm chuẩn:** Hỏi bằng ngôn ngữ tự nhiên, hỗ trợ viết tắt (HUST, PTIT, NEU...).
 - **Hybrid Search Engine:** Kết hợp BM25 + Fuzzy Matching + Token Overlap để tìm trường chính xác tuyệt đối.
 - **Unified Analyzer:** Gộp phân loại ý định + trích xuất thực thể + chuẩn hóa query vào 1 lần gọi AI duy nhất.
+- **Streaming Response:** Phản hồi từ Recommender/Counselor được hiển thị theo thời gian thực bằng `st.write_stream()`.
 - **Tư vấn hướng nghiệp:** Upload CV để nhận đánh giá và gợi ý ngành học phù hợp.
 - **Gold Test Suite:** Bộ kiểm thử tự động 18 test cases để đảm bảo chất lượng.
 
@@ -19,6 +20,7 @@ Hệ thống AI Chatbot thông minh hỗ trợ tra cứu điểm chuẩn, thông
 chatbot__agentic/
 ├── app.py                  # Giao diện Streamlit (UI chính)
 ├── router.py               # Unified Analyzer (Routing + Entity Extraction)
+├── llm_client.py           # OpenRouter client, fallback model chain, streaming LLM helper
 ├── agents/
 │   ├── recommender.py      # Agent tra cứu điểm chuẩn (Hybrid Matcher + Pandas Engine)
 │   └── counselor.py        # Agent tư vấn hướng nghiệp (CV Analysis)
@@ -76,13 +78,13 @@ pip install -r requirements.txt
 # Copy file template thành file .env thật
 cp .env.example .env
 
-# Mở file .env và điền API Key Groq của bạn vào
-# (Lấy key miễn phí tại: https://console.groq.com/keys)
+# Mở file .env và điền OpenRouter API Key của bạn
+# (Lấy key tại: https://openrouter.ai/keys)
 ```
 
 Nội dung file `.env` sau khi điền:
 ```
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxx
 ```
 
 ### Bước 5: Chuẩn bị Dữ liệu
@@ -93,6 +95,7 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 data/
 ├── data_tuyensinh_clean.csv        # Database tuyển sinh chính (đã làm sạch)
 ├── data_diem_chuan_verified.csv    # Database điểm chuẩn đã xác thực
+├── data_tuyensinh_2026.csv         # Đề án tuyển sinh 2026 đã xử lý
 ├── DATS_2024/                      # Thư mục PDF gốc năm 2024
 └── DATS_2025/                      # Thư mục PDF gốc năm 2025
 ```
@@ -140,9 +143,10 @@ python tests/run_gold_tests.py --id S08
 
 | Thành phần | Công nghệ |
 |---|---|
-| LLM | Groq API (Llama 3.3 70B) |
+| LLM | OpenRouter API (`qwen/qwen3-8b` + fallback models) |
 | UI | Streamlit |
 | Data Engine | Pandas |
 | Search | BM25 + Fuzzy Matching (thuần Python) |
 | OCR | EasyOCR + PyMuPDF |
-| Testing | Gold Test Set (Custom) |
+| Streaming | OpenAI-compatible `stream=True` + `st.write_stream()` |
+| Testing | Pytest Unit Tests + Gold Test Set (Custom) |

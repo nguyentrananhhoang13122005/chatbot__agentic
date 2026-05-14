@@ -6,7 +6,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 from llm_client import validate_api_key
-from router import classify_query, dispatch_to_agent
+from router import classify_query, dispatch_to_agent_stream
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
@@ -39,11 +39,8 @@ def _process_query(query: str, uploaded_cv=None):
         status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
 
     # === BƯỚC 2: AGENT XỬ LÝ ===
-    with st.spinner(f"{agent_icon} **{agent_name}** đang xử lý..."):
-        response = dispatch_to_agent(classification, query, uploaded_cv)
-
-    st.write(response)
-    return response
+    response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv)
+    return st.write_stream(response_generator)
 
 # ============================================================
 # RISO DESIGN SYSTEM — Tokens from DESIGN.md
