@@ -71,76 +71,40 @@ def _render_structured_response(response: dict) -> str:
     return "\n\n".join(part for part in history_parts if part)
 
 
-def _stream_with_ai_status(response_generator, ai_status):
-    yielded_any = False
-    try:
-        for chunk in response_generator:
-            if not yielded_any:
-                ai_status.update(label=" AI đã bắt đầu trả lời", state="complete", expanded=False)
-                yielded_any = True
-            yield chunk
-    except Exception:
-        ai_status.update(label="⚠️ AI bị gián đoạn", state="error", expanded=True)
-        raise
-    if not yielded_any:
-        ai_status.update(label=" Hoàn tất gọi AI", state="complete", expanded=False)
-
-
 def _process_query(query: str, uploaded_cv=None):
     """Xử lý câu hỏi qua pipeline: Router Classify → Agent Dispatch."""
     has_file = uploaded_cv is not None
     chat_history = st.session_state.messages[-4:]
 
+    # === HIỂU ỨNG CHỜ "ĐANG SUY LUẬN" ===
+    thinking_ui = st.empty()
+    thinking_ui.markdown("""
+        <div class="ai-thinking">
+            <span class="ai-icon">✨</span> Đang suy luận chuyên sâu<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+    """, unsafe_allow_html=True)
+
     # === BƯỚC 1: ROUTER PHÂN LOẠI ===
-    with st.status(" **Router** đang phân loại câu hỏi...", expanded=True) as status:
-        classification = classify_query(query, has_file, chat_history)
+    classification = classify_query(query, has_file, chat_history)
+    intent = classification["intent"]
 
-        intent = classification["intent"]
-        if intent == "GENERAL":
-            agent_name = "General AI (Trả lời chung)"
-            agent_icon = "🤖"
-        elif intent == "COUNSELOR":
-            agent_name = "Counselor (Tư vấn hướng nghiệp)"
-            agent_icon = "🧑‍🏫"
-        else:
-            agent_name = "Recommender (Tra cứu điểm)"
-            agent_icon = "📊"
-
-        st.write(f"**Loại câu hỏi:** `{intent}`")
-        st.write(f"**Giao cho:** {agent_icon} **{agent_name}**")
-        if classification.get("error_message"):
-            st.warning(classification["error_message"])
-        if intent == "RECOMMENDER":
-            location_str = classification.get('location', 'ALL')
-            location_display = "" if location_str == "ALL" else f" · **Vùng:** `{location_str}`"
-            st.write(f"**Trường:** `{classification.get('school', 'ALL')}`{location_display} · **Ngành:** `{classification.get('keyword', 'ALL')}` · **Năm:** `{classification.get('year', 0) or 'Không xác định'}`")
-
-        status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
+    if classification.get("error_message"):
+        st.warning(classification["error_message"])
 
     # === BƯỚC 2: AGENT XỬ LÝ ===
     if intent == "COUNSELOR" and uploaded_cv is not None:
-        with st.status("🧑‍🏫 **Counselor** đang phân tích hồ sơ...", expanded=True) as ocr_status:
-            st.write(" Đang quét ảnh / đọc PDF...")
-            raw_ocr = doc_file(uploaded_cv)
-            
-            st.write(" Đang phân tích kỹ năng & điểm số...")
-            score_table = parse_cv_scores(raw_ocr)
-            
-            st.write(" Đang truy xuất dữ liệu...")
-            main_db_context = retrieve_main_data()
-            system_prompt = build_counselor_system_prompt(score_table, query, main_db_context)
-            
-            st.write(" Hoàn tất phân tích hồ sơ!")
-            ocr_status.update(
-                label=" Phân tích hồ sơ hoàn tất!",
-                state="complete", expanded=False
-            )
-            
-        ai_status = st.status(" **Counselor** đang gọi AI tư vấn...", expanded=True)
+        raw_ocr = doc_file(uploaded_cv)
+        score_table = parse_cv_scores(raw_ocr)
+        main_db_context = retrieve_main_data()
+        system_prompt = build_counselor_system_prompt(score_table, query, main_db_context)
+        
         response_generator = counselor_respond_stream_from_prompt(system_prompt, query)
-        return st.write_stream(_stream_with_ai_status(response_generator, ai_status))
+        thinking_ui.empty()
+        return st.write_stream(response_generator)
     else:
         response = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
+        thinking_ui.empty()
+        
         if isinstance(response, dict) and "dataframe" in response:
             return _render_structured_response(response)
         if isinstance(response, str):
@@ -780,6 +744,38 @@ def load_custom_css():
     .badge { animation: float 3s ease-in-out infinite; }
     .badge-dot { animation: pulse-ring 2s infinite; }
 
+    /* === AI THINKING === */
+    .ai-thinking {
+        font-family: var(--font-sans);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--secondary);
+        padding: var(--sp-8) 0;
+        margin-bottom: var(--sp-16);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-8);
+    }
+    .ai-thinking .ai-icon {
+        font-size: 20px;
+        animation: spin-slow 3s linear infinite;
+    }
+    .ai-thinking .dots span {
+        animation: blink 1.4s infinite both;
+        font-size: 20px;
+        line-height: 1;
+    }
+    .ai-thinking .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .ai-thinking .dots span:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes blink {
+        0% { opacity: 0.2; }
+        20% { opacity: 1; }
+        100% { opacity: 0.2; }
+    }
+    @keyframes spin-slow {
+        100% { transform: rotate(360deg); }
+    }
     """
     # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)
     # Also add robust fallback stack for networks that block Google Fonts
