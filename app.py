@@ -195,18 +195,49 @@ def load_custom_css():
 
     /* === HISTORY ITEM STYLE === */
     .history-item {
-        display: flex; align-items: center; gap: 6px;
-        padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.06);
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; margin: 2px 0;
+        border: 1.5px solid rgba(0,0,0,0.08);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        transition: all 0.2s ease;
+        cursor: default;
+    }
+    .history-item:hover {
+        border-color: var(--primary);
+        background: rgba(242, 55, 161, 0.04);
+        transform: translateX(2px);
+    }
+    .history-item.hi-active {
+        border-color: var(--secondary);
+        border-left: 3px solid var(--primary);
+        background: rgba(44, 64, 167, 0.06);
+        box-shadow: 2px 2px 0px var(--secondary);
     }
     .history-item .hi-title {
-        flex: 1; font-size: 14px; font-weight: 500;
+        flex: 1; font-size: 13px; font-weight: 600;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: var(--text);
     }
     .history-item .hi-date {
-        font-family: var(--font-mono); font-size: 11px;
-        color: #888; white-space: nowrap;
+        font-family: var(--font-mono); font-size: 10px;
+        color: #999; white-space: nowrap;
+        background: rgba(0,0,0,0.04); padding: 2px 6px;
+        border-radius: 3px;
     }
-    .history-item .hi-pin { font-size: 12px; }
+    .history-item .hi-pin {
+        font-size: 11px; flex-shrink: 0;
+        filter: drop-shadow(1px 1px 0px var(--primary));
+    }
+    
+    /* Compact action buttons in history */
+    [data-testid="stSidebar"] div[data-testid="column"] div.stButton > button {
+        padding: 2px 4px!important; 
+        font-size: 13px!important;
+        min-height: 28px!important;
+        border-width: 1.5px!important;
+        box-shadow: 1px 1px 0px var(--border)!important;
+    }
 
     /* === BUTTONS (vivid pink actions) === */
     div.stButton > button[kind="primary"],
@@ -637,41 +668,47 @@ def render_sidebar():
                 sid = sess["id"]
                 is_current = (sid == st.session_state.get("session_id"))
                 date_label = format_session_date(sess["updated_at"])
-                pin = "📌 " if sess["bookmarked"] else ""
-                prefix = "▸ " if is_current else ""
 
-                # Tiêu đề phiên + ngày giờ
-                title_display = f"{prefix}{pin}{sess['title']}"
-                if st.button(f"💬 {title_display}", key=f"load_{sid}", use_container_width=True, type="secondary"):
-                    if st.session_state.messages:
-                        save_session(st.session_state.session_id, st.session_state.messages)
-                    st.session_state.session_id = sid
-                    st.session_state.messages = load_session(sid)
-                    st.session_state.page = "chat"
-                    st.rerun()
+                # === HTML preview card ===
+                active_cls = "hi-active" if is_current else ""
+                pin_badge = '<span class="hi-pin">📌</span>' if sess["bookmarked"] else ""
+                title_safe = sess['title'].replace('<', '&lt;').replace('>', '&gt;')
+                card_html = f'<div class="history-item {active_cls}">{pin_badge}<span class="hi-title">{title_safe}</span><span class="hi-date">{date_label}</span></div>'
+                st.markdown(card_html, unsafe_allow_html=True)
 
-                # Hàng action: ngày + bookmark + xoá
-                ac1, ac2, ac3 = st.columns([5, 1, 1])
-                ac1.caption(date_label)
-                if ac2.button("📌" if sess["bookmarked"] else "🔖", key=f"bm_{sid}"):
-                    toggle_bookmark(sid)
-                    st.rerun()
-                if ac3.button("🗑️", key=f"del_{sid}"):
-                    delete_session(sid)
-                    if sid == st.session_state.get("session_id"):
-                        st.session_state.session_id = new_session_id()
-                        st.session_state.messages = []
-                    st.rerun()
+                # === Action row: Load / Pin / Delete ===
+                col_load, col_pin, col_del = st.columns([6, 1, 1])
+                with col_load:
+                    if st.button("📂 Mở", key=f"load_{sid}", use_container_width=True):
+                        if st.session_state.messages:
+                            save_session(st.session_state.session_id, st.session_state.messages)
+                        st.session_state.session_id = sid
+                        st.session_state.messages = load_session(sid)
+                        st.session_state.page = "chat"
+                        st.rerun()
+                with col_pin:
+                    pin_label = "📌" if sess["bookmarked"] else "🔖"
+                    pin_help = "Bỏ ghim" if sess["bookmarked"] else "Ghim"
+                    if st.button(pin_label, key=f"bm_{sid}", help=pin_help):
+                        toggle_bookmark(sid)
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑️", key=f"del_{sid}", help="Xóa phiên này"):
+                        delete_session(sid)
+                        if sid == st.session_state.get("session_id"):
+                            st.session_state.session_id = new_session_id()
+                            st.session_state.messages = []
+                        st.rerun()
 
         # ─── HỆ THỐNG ───
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
+        st.caption("💡 Phiên chưa ghim sẽ tự động xóa sau 20 ngày")
         if st.button("🧹 Xoá toàn bộ lịch sử", use_container_width=True, type="secondary"):
             clear_all_sessions()
             st.session_state.session_id = new_session_id()
             st.session_state.messages = []
             st.toast("✅ Đã xoá toàn bộ lịch sử chat.")
             st.rerun()
-        st.button("Trợ giúp", use_container_width=True, type="secondary")
 
 
 # === HOME PAGE ===
