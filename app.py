@@ -111,7 +111,9 @@ def _process_query(query: str, uploaded_cv=None):
         if classification.get("error_message"):
             st.warning(classification["error_message"])
         if intent == "RECOMMENDER":
-            st.write(f"**Trường:** `{classification.get('school', 'ALL')}` · **Ngành:** `{classification.get('keyword', 'ALL')}` · **Năm:** `{classification.get('year', 0) or 'Không xác định'}`")
+            location_str = classification.get('location', 'ALL')
+            location_display = "" if location_str == "ALL" else f" · **Vùng:** `{location_str}`"
+            st.write(f"**Trường:** `{classification.get('school', 'ALL')}`{location_display} · **Ngành:** `{classification.get('keyword', 'ALL')}` · **Năm:** `{classification.get('year', 0) or 'Không xác định'}`")
 
         status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
 
