@@ -26,6 +26,7 @@ Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện
      VD ĐÚNG: user gõ "ngoại thương" → trả về "Ngoại thương".
      BẮT BUỘC DỊCH viết tắt tiếng Anh thành tiếng Việt: "HUST" → "Bách khoa Hà Nội", "NEU" → "Kinh tế Quốc dân", "FTU" → "Ngoại thương", "PTIT" → "Bưu chính Viễn thông", "UET" → "Công nghệ ĐHQG Hà Nội", "BKU" → "Bách khoa TPHCM".
      KHÔNG kèm "Đại học", "Học viện", "Trường". Nếu user nói "trường này/trường đó" → dùng lịch sử hội thoại xác định. Nếu không xác định → "ALL".
+   - location: Vùng miền hoặc địa phương nếu user có đề cập (VD: "HN", "HCM", "ĐN", "Hà Nội", "Đà Nẵng", "TPHCM"). Nếu không đề cập → "ALL".
    - keyword: Tên ngành cụ thể (VD: "công nghệ thông tin"). Nếu user gõ mã ngành dạng số → ghi kèm sau dấu | (VD: "y khoa|7720101"). TUYỆT ĐỐI KHÔNG TỰ BỊA MÃ NGÀNH. Nếu hỏi chung "điểm các ngành" → ghi "điểm|chuẩn".
    - year: Năm cụ thể nếu user đề cập (VD: 2024). Nếu không → 0.
 
@@ -33,7 +34,7 @@ Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện
    Viết lại câu hỏi thành câu độc lập, giải tham chiếu "trường này" → tên trường thật, "ngành đó" → tên ngành thật dựa trên lịch sử.
 
 BẮT BUỘC trả về JSON duy nhất, KHÔNG giải thích:
-{"intent": "RECOMMENDER|COUNSELOR|GENERAL", "school": "...", "keyword": "...", "year": 0, "standalone_query": "..."}"""
+{"intent": "RECOMMENDER|COUNSELOR|GENERAL", "school": "...", "location": "...", "keyword": "...", "year": 0, "standalone_query": "..."}"""
 
 
 # ======== BƯỚC 1: PHÂN LOẠI CÂU HỎI (Classification Only) ========
@@ -85,13 +86,14 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
             result = {
                 "intent": analysis.get("intent", "RECOMMENDER").upper(),
                 "school": analysis.get("school", "ALL"),
+                "location": analysis.get("location", "ALL"),
                 "keyword": analysis.get("keyword", "ALL"),
                 "year": analysis.get("year", 0),
                 "standalone_query": analysis.get("standalone_query", user_query),
                 "status": "success"
             }
             
-            print(f"DEBUG [Router → Classify]: intent={result['intent']}, school='{result['school']}', keyword='{result['keyword']}', year={result['year']}")
+            print(f"DEBUG [Router → Classify]: intent={result['intent']}, school='{result['school']}', location='{result['location']}', keyword='{result['keyword']}', year={result['year']}")
             print(f"DEBUG [Router → Classify]: standalone_query='{result['standalone_query']}'")
             
             return result
@@ -108,6 +110,7 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
     return {
         "intent": "COUNSELOR" if has_file else "RECOMMENDER",
         "school": "ALL",
+        "location": "ALL",
         "keyword": "ALL",
         "year": 0,
         "standalone_query": user_query,
@@ -167,15 +170,17 @@ def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None,
     - GENERAL    → LLM trực tiếp (câu hỏi chung)
     """
     intent = classification.get("intent", "RECOMMENDER")
+    standalone_query = classification.get("standalone_query", user_query)
 
     if intent == "GENERAL":
         return _general_llm_answer(user_query, chat_history)
     elif intent == "COUNSELOR":
         return tu_van_cv(cv_file=uploaded_file, user_query=user_query)
-    else:
+    if intent == "RECOMMENDER":
         return query_diem_chuan(
-            user_query=classification.get("standalone_query", user_query),
+            user_query=standalone_query,
             pre_extracted_school=classification.get("school", "ALL"),
+            pre_extracted_location=classification.get("location", "ALL"),
             pre_extracted_keyword=classification.get("keyword", "ALL"),
             pre_extracted_year=classification.get("year", 0),
         )
@@ -195,6 +200,7 @@ def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_fil
         recommender_response = query_diem_chuan_stream(
             user_query=classification.get("standalone_query", user_query),
             pre_extracted_school=classification.get("school", "ALL"),
+            pre_extracted_location=classification.get("location", "ALL"),
             pre_extracted_keyword=classification.get("keyword", "ALL"),
             pre_extracted_year=classification.get("year", 0),
         )

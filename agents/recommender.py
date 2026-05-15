@@ -99,7 +99,7 @@ def _token_overlap_score(query_tokens: list, school_name_lower: str) -> float:
     hits = sum(1 for kw in query_tokens if kw in school_name_lower)
     return hits / len(query_tokens)  # Chuẩn hoá về 0-1
 
-def find_matching_schools(truong_query: str, school_list: list, min_confidence: float = 0.5, strict: bool = False) -> list:
+def find_matching_schools(truong_query: str, school_list: list, min_confidence: float = 0.5, strict: bool = False, location: str = "ALL") -> list:
     """
     Hybrid School Matcher (Multi-Result): Trả về DANH SÁCH tất cả trường khớp.
     Khi người dùng hỏi 'Bách Khoa' → trả về cả Hà Nội, Đà Nẵng, TPHCM.
@@ -119,6 +119,11 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
     all_doc_tokens = [_tokenize_vn(_normalize_school_name(s)) for s in school_list]
     avg_dl = sum(len(dt) for dt in all_doc_tokens) / max(len(all_doc_tokens), 1)
 
+    # Chuẩn hóa location để buff điểm
+    loc_norm = ""
+    if location != "ALL":
+        loc_norm = _normalize_school_name(location)
+
     scored = []
     for i, school in enumerate(school_list):
         school_normalized = _normalize_school_name(school)
@@ -128,6 +133,11 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
         s_fuzzy = _fuzzy_score(query_normalized, school_normalized)
         s_token = _token_overlap_score(query_tokens, school_normalized)
         combined = (s_bm25 * 0.4) + (s_fuzzy * 0.3) + (s_token * 0.3)
+
+        # Buff điểm nếu có location và location khớp một phần vào tên trường
+        if loc_norm and loc_norm in school_normalized:
+            combined += 1.0  # Buff cực mạnh để leo lên Top 1
+            print(f"DEBUG [Matcher]: Buffed {school} by 1.0 due to location '{loc_norm}'")
 
         scored.append((school, combined, s_bm25, s_fuzzy, s_token))
 
@@ -266,7 +276,7 @@ def _build_structured_response(dataframe: pd.DataFrame, prefix: str, messages: l
     }
 
 
-def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False):
+def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_location: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False):
     if df_tuyensinh is None or df_tuyensinh.empty:
         return "⚠️ Dữ liệu tuyển sinh chưa sẵn sàng. Hãy đảm bảo file tiến trình ETL đã cào dữ liệu thành công."
 
@@ -281,7 +291,7 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
     # Dùng verified DB (290 trường) để phát hiện ambiguity
     if df_verified is not None and not df_verified.empty and truong != "ALL":
         all_schools = df_verified['Trường'].dropna().unique().tolist()
-        all_matches = find_matching_schools(truong, all_schools)
+        all_matches = find_matching_schools(truong, all_schools, location=pre_extracted_location)
 
         # Nếu nhiều trường khớp → thử smart disambiguation trước khi hỏi lại
         if len(all_matches) > 1:
@@ -443,7 +453,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         if exact_dats:
             matched_check = exact_dats
         else:
-            matched_check = find_matching_schools(truong, list_check, strict=True)
+            matched_check = find_matching_schools(truong, list_check, strict=True, location=pre_extracted_location)
             
         best_match = None
         if len(matched_check) == 1:
@@ -570,7 +580,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         if exact_verified:
             matched_schools = exact_verified
         else:
-            matched_schools = find_matching_schools(truong, list_of_verified_schools)
+            matched_schools = find_matching_schools(truong, list_of_verified_schools, location=pre_extracted_location)
 
         print(f"DEBUG [Recommender]: Matched {len(matched_schools)} schools: {matched_schools}")
 
@@ -790,7 +800,7 @@ QUY TẮC TRẢ LỜI:
     # Lọc theo trường bằng Token Scoring
     if truong != "ALL":
         list_of_all_schools = filtered_df['Tên Trường'].dropna().unique().tolist()
-        matched_ocr = find_matching_schools(truong, list_of_all_schools)
+        matched_ocr = find_matching_schools(truong, list_of_all_schools, location=pre_extracted_location)
 
         if matched_ocr:
             filtered_df = filtered_df[filtered_df['Tên Trường'].isin(matched_ocr)]
@@ -843,6 +853,14 @@ QUY TẮC TRẢ LỜI:
             filtered_df = filtered_df.iloc[context_indices]
 
     # ======== BƯỚC 2.5: SMART OCR CLEANER (LÀM SẠCH, KHÔNG PARSE) ========
+    if filtered_df.empty:
+        print(f"DEBUG [Recommender]: filtered_df is empty, returning early to prevent LLM hallucination.")
+        if truong != "ALL":
+            msg = f"Xin lỗi, hiện tại hệ thống chưa có dữ liệu của trường **{truong}**."
+        else:
+            msg = f"Xin lỗi, không tìm thấy dữ liệu nào phù hợp với yêu cầu của bạn."
+        return f"🤖 **[Recommender Agent]**\n\n{msg}\n\n👉 Vui lòng kiểm tra lại từ khóa hoặc thử một câu hỏi khác nhé!"
+
     context_data = clean_ocr_for_llm(filtered_df)
 
     # Giới hạn token
