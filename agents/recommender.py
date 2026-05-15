@@ -252,7 +252,21 @@ def _stream_llm_response(prefix: str, messages: list, temperature: float = 0.1, 
         yield suffix
 
 
-def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False) -> str:
+def _build_structured_response(dataframe: pd.DataFrame, prefix: str, messages: list, temperature: float = 0.1, max_tokens: int | None = None, suffix: str = "") -> dict:
+    return {
+        "dataframe": dataframe.copy(),
+        "prefix": prefix,
+        "stream": call_llm_stream(
+            messages=messages,
+            model=OPENROUTER_FALLBACK_MODELS[0],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ),
+        "suffix": suffix,
+    }
+
+
+def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False):
     if df_tuyensinh is None or df_tuyensinh.empty:
         return "⚠️ Dữ liệu tuyển sinh chưa sẵn sàng. Hãy đảm bảo file tiến trình ETL đã cào dữ liệu thành công."
 
@@ -354,6 +368,12 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
                 year_mode = data_sample['Năm'].mode()
                 data_year_val = int(year_mode.iloc[0]) if not year_mode.empty else ""
 
+            table_rule_cross = (
+                "4. KHÔNG tạo bảng Markdown. Bảng dữ liệu đã được hiển thị phía trên bằng giao diện bảng. Chỉ nhận xét và phân tích ngắn gọn."
+                if stream_output
+                else "4. Tạo BẢNG MARKDOWN rõ ràng."
+            )
+
             llm_prompt_cross = f"""Bạn là trợ lý tuyển sinh AI chuyên nghiệp cho Việt Nam.
 
 CÂU HỎI CỦA NGƯỜI DÙNG: "{user_query}"
@@ -367,9 +387,9 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa.
 2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
 3. Nếu hỏi "top" hoặc "xếp hạng" → SẮP XẾP theo điểm chuẩn GIẢM DẦN.
-4. Tạo BẢNG MARKDOWN rõ ràng.
+{table_rule_cross}
 5. BẮT BUỘC ghi rõ NĂM dữ liệu.
-6. Sử dụng Markdown, trả lời tiếng Việt chuyên nghiệp.
+6. Sử dụng Markdown cho phần nhận xét, trả lời tiếng Việt chuyên nghiệp.
 7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời."""
 
             llm_messages_cross = [{"role": "user", "content": llm_prompt_cross}]
@@ -379,7 +399,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             print(f"DEBUG [Recommender]: Cross-school search for '{tu_khoa}' → {len(vf_cross)} rows, {vf_cross['Trường'].nunique()} schools")
 
             if stream_output:
-                return _stream_llm_response(
+                return _build_structured_response(
+                    dataframe=data_sample[export_cols],
                     prefix=prefix_cross,
                     messages=llm_messages_cross,
                     temperature=0.1,
@@ -615,6 +636,12 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 if 'Điểm chuẩn' in vf_match.columns:
                     stats += f"Điểm chuẩn: {vf_match['Điểm chuẩn'].min()} - {vf_match['Điểm chuẩn'].max()}."
 
+                table_rule = (
+                    "7. KHÔNG tạo bảng Markdown. Bảng dữ liệu đã được hiển thị phía trên bằng giao diện bảng. Chỉ dùng Markdown cho phần nhận xét, bullet và nhấn mạnh."
+                    if stream_output
+                    else "7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp."
+                )
+
                 llm_prompt = f"""Bạn là trợ lý tuyển sinh AI chuyên nghiệp cho Việt Nam.
 
 CÂU HỎI CỦA NGƯỜI DÙNG: "{user_query}"
@@ -631,7 +658,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 4. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
 5. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
 6. Nếu hỏi chung chung → tóm tắt ngắn gọn.
-7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
+{table_rule}
 8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu (VD: "Điểm chuẩn **năm 2025**").
 9. Nếu người dùng hỏi thông tin KHÔNG CÓ trong dữ liệu → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
 10. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời (VD: điểm chuẩn ngành X, phương thức xét tuyển, so sánh điểm chuẩn năm trước)."""
@@ -641,7 +668,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 data_year = int(data_sample['Năm'].mode().iloc[0]) if 'Năm' in data_sample.columns else ""
 
                 if stream_output:
-                    return _stream_llm_response(
+                    return _build_structured_response(
+                        dataframe=data_sample[export_cols],
                         prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
                         messages=llm_messages,
                         temperature=0.1,
@@ -868,14 +896,10 @@ DỮ LIỆU:
 
 
 def query_diem_chuan_stream(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0):
-    response = query_diem_chuan(
+    return query_diem_chuan(
         user_query=user_query,
         pre_extracted_school=pre_extracted_school,
         pre_extracted_keyword=pre_extracted_keyword,
         pre_extracted_year=pre_extracted_year,
         stream_output=True,
     )
-    if isinstance(response, str):
-        yield response
-        return
-    yield from response
