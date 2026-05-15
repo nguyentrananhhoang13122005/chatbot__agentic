@@ -137,7 +137,8 @@ def cleanup_old_sessions(days=20):
     conn = get_db_connection()
     c = conn.cursor()
     # Delete non-bookmarked sessions older than X days
-    c.execute(f"DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE updated_at <= datetime('now', '-{days} days') AND is_bookmarked = 0)")
-    c.execute(f"DELETE FROM sessions WHERE updated_at <= datetime('now', '-{days} days') AND is_bookmarked = 0")
+    time_modifier = f"-{int(days)} days"
+    c.execute("DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE updated_at <= datetime('now', ?) AND is_bookmarked = 0)", (time_modifier,))
+    c.execute("DELETE FROM sessions WHERE updated_at <= datetime('now', ?) AND is_bookmarked = 0", (time_modifier,))
     conn.commit()
     conn.close()

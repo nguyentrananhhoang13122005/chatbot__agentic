@@ -436,15 +436,25 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         else:
             matched_check = find_matching_schools(truong, list_check, strict=True, location=pre_extracted_location)
             
+        available_years = []
         best_match = None
         if len(matched_check) == 1:
             s = matched_check[0]
-            row = df_dats[df_dats['Trường'] == s].iloc[0]
-            y = row['Năm']
-            content = row.get('Nội dung', '')
-            if content and len(content) >= 50:
-                best_match = (y, s, content)
-                print(f"DEBUG [Recommender]: Found '{s}' in DATS Master (year {y})")
+            school_rows = df_dats[df_dats['Trường'] == s]
+            
+            for _, r in school_rows.iterrows():
+                available_years.append((r['Năm'], s))
+                
+            target_row = school_rows[school_rows['Năm'] == target_year]
+            if not target_row.empty and len(str(target_row.iloc[0].get('Nội dung', ''))) >= 50:
+                best_match = (target_year, s, target_row.iloc[0].get('Nội dung', ''))
+            elif not school_rows.empty:
+                row = school_rows.iloc[0]
+                if len(str(row.get('Nội dung', ''))) >= 50:
+                    best_match = (row['Năm'], s, row.get('Nội dung', ''))
+            
+            if best_match:
+                print(f"DEBUG [Recommender]: Found '{s}' in DATS Master (year {best_match[0]})")
 
         # --- Helper: Smart content extraction ---
         def _extract_content_for_llm(content: str, query_lc: str) -> str:
