@@ -9,3 +9,4 @@ Pillow==12.2.0
 numpy
 easyocr==1.7.2
 opencv-python-headless==4.13.0.92
+pytest==9.0.3

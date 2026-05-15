@@ -7,6 +7,13 @@ if sys.stdout.encoding != 'utf-8':
 
 from llm_client import validate_api_key
 from router import classify_query, dispatch_to_agent_stream
+from agents.counselor import (
+    build_counselor_system_prompt,
+    counselor_respond_stream_from_prompt,
+    doc_file,
+    parse_cv_scores,
+    retrieve_main_data,
+)
 from chat_db import (
     init_db, new_session_id, save_session, list_sessions,
     load_session, delete_session, toggle_bookmark,
@@ -23,6 +30,21 @@ cleanup_old_sessions(days=20)
 @st.cache_data(ttl=600, show_spinner=False)
 def _cached_validate_api_key_v2():
     return validate_api_key()
+
+
+def _stream_with_ai_status(response_generator, ai_status):
+    yielded_any = False
+    try:
+        for chunk in response_generator:
+            if not yielded_any:
+                ai_status.update(label="✅ AI đã bắt đầu trả lời", state="complete", expanded=False)
+                yielded_any = True
+            yield chunk
+    except Exception:
+        ai_status.update(label="⚠️ AI bị gián đoạn", state="error", expanded=True)
+        raise
+    if not yielded_any:
+        ai_status.update(label="✅ Hoàn tất gọi AI", state="complete", expanded=False)
 
 
 def _process_query(query: str, uploaded_cv=None):
@@ -55,9 +77,30 @@ def _process_query(query: str, uploaded_cv=None):
         status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
 
     # === BƯỚC 2: AGENT XỬ LÝ ===
-    response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
-    return st.write_stream(response_generator)
-
+    if intent == "COUNSELOR" and uploaded_cv is not None:
+        with st.status("🧑‍🏫 **Counselor** đang phân tích hồ sơ...", expanded=True) as ocr_status:
+            st.write("📷 Đang quét ảnh / đọc PDF...")
+            raw_ocr = doc_file(uploaded_cv)
+            
+            st.write("🔍 Đang phân tích kỹ năng & điểm số...")
+            score_table = parse_cv_scores(raw_ocr)
+            
+            st.write("🗄️ Đang truy xuất dữ liệu...")
+            main_db_context = retrieve_main_data()
+            system_prompt = build_counselor_system_prompt(score_table, query, main_db_context)
+            
+            st.write("✅ Hoàn tất phân tích hồ sơ!")
+            ocr_status.update(
+                label="✅ Phân tích hồ sơ hoàn tất!",
+                state="complete", expanded=False
+            )
+            
+        ai_status = st.status("🤖 **Counselor** đang gọi AI tư vấn...", expanded=True)
+        response_generator = counselor_respond_stream_from_prompt(system_prompt, query)
+        return st.write_stream(_stream_with_ai_status(response_generator, ai_status))
+    else:
+        response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
+        return st.write_stream(response_generator)
 # ============================================================
 # RISO DESIGN SYSTEM — Tokens from DESIGN.md
 # Style: Playful two-color risograph-inspired system with paper-like warmth, vivid pink actions, and bold blue structure. clean, high-contrast.
