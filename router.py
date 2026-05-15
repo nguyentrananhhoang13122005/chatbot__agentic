@@ -14,10 +14,12 @@ ANALYZER_PROMPT = """Bạn là BỘ PHÂN TÍCH TRUNG TÂM (Analyzer) cho Hệ t
 Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện 3 việc trong 1 lần:
 
 1. PHÂN LOẠI (intent):
-   - "RECOMMENDER": Tra cứu điểm chuẩn, tìm trường/ngành, hỏi chỉ tiêu, thông tin tuyển sinh, so sánh trường, hỏi về ngành phù hợp dựa trên điểm số.
+   - "RECOMMENDER": CHỈ DÙNG KHI TRA CỨU SỐ LIỆU (Tra cứu điểm chuẩn, mã ngành, chỉ tiêu, thông tin tuyển sinh, phương thức xét tuyển, khối thi).
    - "COUNSELOR": Tư vấn hướng nghiệp, đánh giá hồ sơ năng lực, phân tích CV, định hướng sở thích/tính cách.
-   - "GENERAL": Mọi câu hỏi KHÔNG liên quan tới tuyển sinh đại học Việt Nam hoặc tư vấn hướng nghiệp. VD: hỏi thời tiết, lập trình, lịch sử, toán học, chào hỏi xã giao, hỏi "bạn là ai", v.v.
-   LƯU Ý: Nếu câu hỏi đề cập tới trường/ngành CỤ THỂ (kể cả qua "trường này", "ngành đó") → luôn là RECOMMENDER.
+   - "GENERAL": Mọi câu hỏi KHÁC. BAO GỒM: 
+       + So sánh chất lượng, đánh giá uy tín, cơ sở vật chất, môi trường học tập giữa các trường/ngành.
+       + Hỏi đáp kiến thức chung, lịch sử, toán học, chào hỏi, v.v.
+   LƯU Ý TỐI QUAN TRỌNG: Mặc dù câu hỏi có nhắc đến tên trường cụ thể (VD: "so sánh ngoại thương và bách khoa", "trường kinh tế quốc dân đào tạo tốt không"), nhưng nếu tính chất câu hỏi là TƯ VẤN/ĐÁNH GIÁ CHẤT LƯỢNG (không hỏi điểm chuẩn) thì BẮT BUỘC phải phân loại là "GENERAL".
 
 2. TRÍCH XUẤT THỰC THỂ (entities — chỉ cho RECOMMENDER):
    - school: Trả về từ khóa TIẾNG VIỆT ĐÚNG NGUYÊN VĂN những gì user gõ. TUYỆT ĐỐI KHÔNG THÊM ĐỊA DANH nếu user không nói rõ.
@@ -93,6 +95,34 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
                 "status": "success"
             }
             
+            # ======== GUARD: Override RECOMMENDER → GENERAL cho câu hỏi đánh giá/so sánh chất lượng ========
+            if result["intent"] == "RECOMMENDER":
+                q_lower = user_query.lower()
+                # Từ khóa đánh giá chất lượng / so sánh định tính
+                qualitative_keywords = [
+                    'so sánh chất lượng', 'so sánh giữa', 'so sánh trường',
+                    'chất lượng đào tạo', 'chất lượng giảng dạy', 'chất lượng',
+                    'môi trường học', 'cơ sở vật chất', 'uy tín',
+                    'trường nào tốt hơn', 'trường nào hơn', 'nên học trường nào',
+                    'nên chọn trường', 'đào tạo tốt', 'đào tạo có tốt',
+                    'trường nào uy tín', 'review trường', 'đánh giá trường',
+                    'trường nào đáng', 'có nên học', 'có tốt không',
+                    'khác nhau như thế nào', 'khác nhau thế nào', 'khác gì',
+                    'hơn gì', 'thua gì', 'mạnh hơn', 'yếu hơn',
+                ]
+                # Từ khóa tra cứu SỐ LIỆU cụ thể (nếu có thì giữ nguyên RECOMMENDER)
+                data_keywords = [
+                    'điểm chuẩn', 'bao nhiêu điểm', 'điểm trúng tuyển',
+                    'chỉ tiêu', 'mã ngành', 'tổ hợp', 'khối thi',
+                    'học phí', 'phương thức xét tuyển',
+                ]
+                has_qualitative = any(kw in q_lower for kw in qualitative_keywords)
+                has_data_lookup = any(kw in q_lower for kw in data_keywords)
+                
+                if has_qualitative and not has_data_lookup:
+                    result["intent"] = "GENERAL"
+                    print(f"DEBUG [Router → Guard]: Overrode RECOMMENDER → GENERAL (qualitative comparison detected)")
+
             print(f"DEBUG [Router → Classify]: intent={result['intent']}, school='{result['school']}', location='{result['location']}', keyword='{result['keyword']}', year={result['year']}")
             print(f"DEBUG [Router → Classify]: standalone_query='{result['standalone_query']}'")
             
@@ -120,10 +150,10 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
 
 
 # ======== GENERAL LLM PROMPT ========
-GENERAL_SYSTEM_PROMPT = """Bạn là UniSearch AI — trợ lý thông minh đa năng.
-Bạn chuyên về tuyển sinh đại học Việt Nam, nhưng cũng có thể trả lời các câu hỏi kiến thức chung.
-Hãy trả lời ngắn gọn, chính xác, thân thiện bằng tiếng Việt.
-Nếu câu hỏi liên quan đến tuyển sinh, hãy nhắc người dùng rằng họ có thể hỏi trực tiếp về điểm chuẩn, ngành học, hoặc so sánh trường để được hỗ trợ chuyên sâu hơn."""
+GENERAL_SYSTEM_PROMPT = """Bạn là UniSearch AI — trợ lý thông minh và chuyên gia tư vấn giáo dục.
+Nhiệm vụ của bạn là giải đáp các thắc mắc chung, TƯ VẤN CHẤT LƯỢNG, SO SÁNH MÔI TRƯỜNG HỌC TẬP, CƠ SỞ VẬT CHẤT, và ĐỊNH HƯỚNG chọn trường cho học sinh.
+Hãy trả lời bám sát đúng trọng tâm câu hỏi của người dùng, phân tích khách quan đa chiều (ưu điểm, nhược điểm). TUYỆT ĐỐI không trả lời lan man, không liên quan.
+Nếu người dùng cần tra cứu điểm chuẩn hoặc số liệu tuyển sinh cụ thể, hãy nhắc họ yêu cầu trực tiếp để hệ thống tự động tra cứu cơ sở dữ liệu điểm chuẩn."""
 
 
 def _general_llm_answer(user_query: str, chat_history: list = None) -> str:
