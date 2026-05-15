@@ -188,9 +188,11 @@ def load_custom_css():
         min-width: 320px!important; width: 320px!important;
     }
     [data-testid="stSidebar"] > div:first-child { padding-top: var(--sp-4)!important; }
-    [data-testid="stSidebar"] > div * {
+    [data-testid="stSidebar"] > div *:not(.material-symbols-rounded) {
         font-family: var(--font-sans)!important;
-        color: var(--text)!important;
+    }
+    [data-testid="stSidebar"] > div * {
+        color: var(--text);
     }
 
     /* === HISTORY ITEM STYLE (Minimal & Flat) === */
@@ -239,8 +241,29 @@ def load_custom_css():
         opacity: 0.5;
         transition: opacity 0.2s;
     }
-    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:last-child button:hover {
-        opacity: 1;
+    /* Hide the default chevron icon/text inside the popover button */
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button {
+        color: transparent !important; /* Hide raw text */
+    }
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button span,
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button svg,
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button i {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        font-size: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button div[data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button div[data-testid="stMarkdownContainer"] p {
+        color: #888 !important; /* Color only the ⋮ text */
+        font-size: 20px !important; /* Restore font size for ⋮ */
+        line-height: 1 !important;
+        margin: 0 !important;
+        transition: color 0.2s;
+    }
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover div[data-testid="stMarkdownContainer"] p {
         color: var(--primary) !important;
     }
     
