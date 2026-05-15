@@ -183,7 +183,7 @@ def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None,
 
 def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_file=None, chat_history: list = None):
     """
-    Router Section 2 Streaming: Dựa trên kết quả phân loại, giao việc cho đúng Agent và trả về generator.
+    Router Section 2 Streaming: Dựa trên kết quả phân loại, giao việc cho đúng Agent và trả về kết quả stream/structured response.
     """
     intent = classification.get("intent", "RECOMMENDER")
 
@@ -192,12 +192,13 @@ def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_fil
     elif intent == "COUNSELOR":
         return tu_van_cv_stream(cv_file=uploaded_file, user_query=user_query)
     else:
-        return query_diem_chuan_stream(
+        recommender_response = query_diem_chuan_stream(
             user_query=classification.get("standalone_query", user_query),
             pre_extracted_school=classification.get("school", "ALL"),
             pre_extracted_keyword=classification.get("keyword", "ALL"),
             pre_extracted_year=classification.get("year", 0),
         )
+        return recommender_response
 
 
 # ======== WRAPPER (Backward compatibility) ========
