@@ -275,16 +275,43 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
         all_schools = df_verified['Trường'].dropna().unique().tolist()
         all_matches = find_matching_schools(truong, all_schools)
 
-        # Nếu nhiều trường khớp → HỎI LẠI, không đoán mò
+        # Nếu nhiều trường khớp → kiểm tra xem có EXACT match không
         if len(all_matches) > 1:
-            school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
-            return (
-                f"🤖 **[Recommender Agent]**\n\n"
-                f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
-                f"{school_list_str}\n\n"
-                f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
-                f"(VD: *\"{all_matches[0]}\"* hoặc *\"{all_matches[-1]}\"*)"
-            )
+            # Smart disambiguation: nếu query là exact match với 1 trường → auto-select
+            query_norm = _normalize_school_name(truong)
+            exact_match = None
+            for m in all_matches:
+                m_norm = _normalize_school_name(m)
+                # Exact match: tên trường chứa đúng query HOẶC query chứa đúng tên trường
+                if query_norm == m_norm or m_norm == query_norm:
+                    exact_match = m
+                    break
+                # Near-exact: tên trường bắt đầu hoặc kết thúc bằng đúng query tokens
+                q_tokens = set(_tokenize_vn(query_norm))
+                m_tokens = set(_tokenize_vn(m_norm))
+                # Nếu query tokens = tên trường tokens (VD: "cần thơ" = "đại học cần thơ" bỏ prefix)
+                if q_tokens and q_tokens.issubset(m_tokens) and len(m_tokens) - len(q_tokens) <= 2:
+                    if exact_match is None:
+                        exact_match = m
+                    else:
+                        # Nếu có nhiều near-exact → chọn trường có tên NGẮN hơn (cụ thể hơn)
+                        if len(m) < len(exact_match):
+                            exact_match = m
+
+            if exact_match:
+                # Auto-select exact match, bypass disambiguation
+                all_matches = [exact_match]
+                print(f"DEBUG [GUARD 0]: Auto-selected exact match: '{exact_match}' from {len(all_matches)} candidates")
+            else:
+                # Genuinely ambiguous → ask user
+                school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
+                return (
+                    f"🤖 **[Recommender Agent]**\n\n"
+                    f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
+                    f"{school_list_str}\n\n"
+                    f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
+                    f"(VD: *\"{all_matches[0]}\"* hoặc *\"{all_matches[-1]}\"*)"
+                )
 
     # ======== BƯỚC 1B: TRA CỨU CHÉO (CROSS-SCHOOL) — Khi truong=ALL + có keyword ========
     # Xử lý câu hỏi dạng "Top 5 trường CNTT", "ngành Y điểm cao nhất", "so sánh ngành kinh tế"
@@ -383,21 +410,19 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if llm_error_info:
                 return f"{prefix_cross}{llm_error_info['message']}"
 
-    # ======== QUYẾT ĐỊNH DỮ LIỆU: 2026 DATS hay 2025 ĐIỂM CHUẨN? ========
-    # Câu hỏi về "điểm chuẩn" → ưu tiên Verified DB (có số liệu thực) → fallback DATS
-    # Câu hỏi về "tuyển sinh/phương thức/chỉ tiêu/ngành/học phí" → ưu tiên 2026 DATS → fallback Verified DB
+    # ======== QUYẾT ĐỊNH DỮ LIỆU: TÌM KIẾM TOÀN BỘ 3 NĂM ========
+    # Luồng: DATS (2026→2025→2024) → Verified DB → OCR
+    # CHỈ trả lời "không có dữ liệu" khi ĐÃ TÌM HẾT TẤT CẢ data sources
     query_lower = user_query.lower()
     is_score_query = any(kw in query_lower for kw in ['điểm chuẩn', 'điểm', 'bao nhiêu điểm', 'điểm trúng tuyển'])
     is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký', 'học phí', 'ngành', 'học bổng', 'ký túc'])
 
-    # === ĐIỂM CHUẨN → Nhảy thẳng sang Verified DB (Bước 2), bỏ qua DATS ===
-    # DATS chứa đề án tuyển sinh (phương thức, chỉ tiêu), KHÔNG chứa điểm chuẩn thực tế.
-    # Verified DB chứa điểm chuẩn chính xác đã kiểm chứng.
-    skip_dats_for_scores = is_score_query and not is_admission_query
+    # Flag theo dõi: đã tìm thấy và trả lời từ nguồn nào chưa?
+    dats_answered = False
 
     # ======== BƯỚC 1: TRA CỨU DATS — TỰ ĐỘNG TÌM NĂM CÓ DỮ LIỆU PHÙ HỢP ========
-    # Chỉ dùng DATS khi hỏi về thông tin tuyển sinh (không phải điểm chuẩn)
-    if df_dats is not None and not df_dats.empty and truong != "ALL" and not skip_dats_for_scores:
+    # Luôn thử DATS trước cho MỌI loại câu hỏi (admission + score)
+    if df_dats is not None and not df_dats.empty and truong != "ALL":
 
         # Xác định năm tìm kiếm
         if nam > 0:
@@ -568,8 +593,10 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 max_tokens=4096,
             )
             if llm_answer:
+                dats_answered = True
                 return f"{dats_prefix}{llm_answer}{dats_suffix}"
             if llm_error_info:
+                dats_answered = True
                 return (
                     f"{dats_prefix}"
                     f"{llm_error_info['message']}\n\n"
@@ -577,10 +604,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     f"Vui lòng thử lại sau vài phút."
                 )
 
-        elif available_years:
-            # Dữ liệu DATS không đủ dài → KHÔNG dead-end, tiếp tục sang Verified DB
-            print(f"DEBUG [Recommender]: DATS content too short, falling through to Verified DB")
-            pass  # Cho phép rơi xuống Bước 2 (Verified DB)
+        # DATS không tìm thấy dữ liệu đủ → KHÔNG dead-end, tiếp tục sang Verified DB
+        print(f"DEBUG [Recommender]: DATS không đủ dữ liệu, falling through to Verified DB")
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
     if df_verified is not None and not df_verified.empty and truong != "ALL":
