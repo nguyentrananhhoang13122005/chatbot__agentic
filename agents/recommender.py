@@ -536,15 +536,16 @@ THÔNG TIN TUYỂN SINH NĂM {search_year} CỦA TRƯỜNG {school_found}:
 {content_for_llm}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
-4. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} không có thông tin về [chủ đề]."
-5. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí. TUYỆT ĐỐI KHÔNG cắt ngắn.
-6. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
-7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
-8. KHÔNG hiển thị cột trống.
-9. QUAN TRỌNG: Ở cuối câu trả lời, BẮT BUỘC đề xuất 2-3 câu hỏi gợi ý CỤ THỂ liên quan đến trường này MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời. Gợi ý PHẢI phù hợp với nhu cầu ban đầu của người dùng. VD: nếu hỏi học phí → gợi ý về học bổng, chỉ tiêu, phương thức xét tuyển. Nếu hỏi điểm chuẩn → gợi ý so sánh năm trước, ngành khác cùng trường."""
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận, KHÔNG bịa số liệu.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG liệt kê thông tin thừa.
+3. Khi trích dẫn SỐ LIỆU (học phí, chỉ tiêu, mã ngành, điểm), phải GHI ĐÚNG CON SỐ từ dữ liệu gốc. Nếu dữ liệu ghi "28,700,000 VNĐ" thì phải ghi đúng "28,700,000 VNĐ".
+4. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
+5. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} của trường này không có thông tin về [chủ đề]."
+6. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí đúng nguyên văn từ dữ liệu.
+7. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
+8. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
+9. KHÔNG hiển thị cột trống.
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ liên quan đến trường {school_found} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
             dats_prefix = f"🤖 **[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
             if fell_back:
                 dats_prefix += f"{fallback_note}\n\n"
@@ -665,16 +666,16 @@ DỮ LIỆU CHÍNH THỨC CỦA TRƯỜNG {school_name} (dạng CSV):
 THỐNG KÊ: {stats}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường — mọi phương thức xét tuyển đều do trường công bố.
-4. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
-5. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
-6. Nếu hỏi chung chung → tóm tắt ngắn gọn.
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU CSV ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận thêm.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG liệt kê thông tin thừa.
+3. Khi trích dẫn ĐIỂM CHUẨN, phải GHI ĐÚNG CON SỐ từ cột "Điểm chuẩn" trong CSV. VD: nếu CSV ghi 25.5 thì trả lời 25.5, KHÔNG làm tròn.
+4. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm CHÍNH XÁC theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
+5. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
+6. Nếu hỏi chung chung → tóm tắt ngắn gọn dựa trên thống kê.
 7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
-8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu (VD: "Điểm chuẩn **năm 2025**").
-9. Nếu người dùng hỏi thông tin KHÔNG CÓ trong dữ liệu → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
-10. QUAN TRỌNG: Ở cuối câu trả lời, BẮT BUỘC đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường này, PHÙ HỢP với nhu cầu ban đầu của người dùng. Chỉ gợi ý những thông tin MÀ HỆ THỐNG CÓ DỮ LIỆU (VD: điểm chuẩn ngành X, phương thức xét tuyển, so sánh điểm năm trước)."""
+8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu.
+9. Nếu dữ liệu CSV KHÔNG CÓ thông tin user hỏi → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]."
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường {school_name} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
@@ -813,7 +814,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         context_data = context_data[:5000] + "\n...[Dữ liệu bị lược bỏ do giới hạn Token]...\n" + context_data[-5000:]
 
     # ======== BƯỚC 3: LLM SYNTHESIS (PROMPT CỨNG - ĐA DẠNG FORMAT) ========
-    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. Trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới.
+    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. CHỈ trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng.
 
 CÂU HỎI: "{user_query}"
 
@@ -829,14 +830,13 @@ CÁCH ĐỌC ĐÚNG:
 3. ĐIỂM TRÚNG TUYỂN thường là cột CUỐI CÙNG trong mỗi nhóm (Năm 2024, Năm 2023).
 
 QUY TẮC OUTPUT BẮT BUỘC:
-1. Trả lời CHÍNH XÁC trọng tâm câu hỏi. TUYỆT ĐỐI không đưa thông tin thừa. Nếu người dùng hỏi một ngành cụ thể, CHỈ trả lời về ngành đó, không liệt kê tất cả các ngành. Nếu người dùng hỏi chung chung về điểm chuẩn, thì mới liệt kê dưới dạng BẢNG MARKDOWN.
-2. KHÔNG viết bài luận, KHÔNG quảng cáo trường, KHÔNG bịa thông tin.
-3. Cấu trúc bảng (nếu cần dùng bảng): | Mã ngành | Tên ngành | Phương thức | Điểm chuẩn | Chỉ tiêu |
-4. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Hãy ưu tiên báo cáo số liệu của năm {nam}. Nếu không có năm {nam}, hãy CẢNH BÁO rõ là không có và báo cáo năm gần nhất.' if nam > 0 else ''}
-5. Nếu KHÔNG tìm thấy dữ liệu điểm: Trả lời "Không tìm thấy dữ liệu điểm trúng tuyển."
-6. Câu hỏi về thông tin chung (vị trí, học phí): Được dùng kiến thức chung, trả lời ngắn gọn.
-7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời.
-
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG suy luận, KHÔNG dùng kiến thức riêng, KHÔNG bịa số liệu.
+2. Trả lời CHÍNH XÁC trọng tâm câu hỏi. Nếu hỏi một ngành → CHỈ trả lời về ngành đó. Nếu hỏi chung → BẢNG MARKDOWN.
+3. Khi trích dẫn số liệu (điểm, chỉ tiêu), GHI ĐÚNG con số từ dữ liệu gốc.
+4. KHÔNG viết bài luận, KHÔNG quảng cáo trường.
+5. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Ưu tiên số liệu năm {nam}. Nếu không có năm {nam}, CẢNH BÁO rõ và báo cáo năm gần nhất.' if nam > 0 else ''}
+6. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu hiện tại không có thông tin về [chủ đề]."
+7. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ mà hệ thống có dữ liệu, PHÙ HỢP với nhu cầu ban đầu.
 
 DỮ LIỆU:
 {context_data}"""
