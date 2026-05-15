@@ -25,6 +25,45 @@ def _cached_validate_api_key_v2():
     return validate_api_key()
 
 
+def _dataframe_to_history_text(dataframe) -> str:
+    try:
+        return dataframe.to_csv(index=False)
+    except Exception:
+        return str(dataframe)
+
+
+def _render_structured_response(response: dict) -> str:
+    prefix = response.get("prefix", "")
+    dataframe = response.get("dataframe")
+    stream = response.get("stream")
+    suffix = response.get("suffix", "")
+    history_parts = []
+
+    if prefix:
+        st.write(prefix)
+        history_parts.append(prefix.strip())
+
+    if dataframe is not None:
+        st.dataframe(dataframe, use_container_width=True, hide_index=True, height=400)
+        table_text = _dataframe_to_history_text(dataframe).strip()
+        if table_text:
+            history_parts.append(f"### Bảng dữ liệu\n\n```csv\n{table_text}\n```")
+
+    if stream is not None:
+        commentary = st.write_stream(stream)
+        if isinstance(commentary, list):
+            commentary = "".join(str(item) for item in commentary)
+        commentary = str(commentary or "").strip()
+        if commentary:
+            history_parts.append(commentary)
+
+    if suffix:
+        st.write(suffix)
+        history_parts.append(suffix.strip())
+
+    return "\n\n".join(part for part in history_parts if part)
+
+
 def _process_query(query: str, uploaded_cv=None):
     """Xử lý câu hỏi qua pipeline: Router Classify → Agent Dispatch."""
     has_file = uploaded_cv is not None
@@ -55,8 +94,13 @@ def _process_query(query: str, uploaded_cv=None):
         status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
 
     # === BƯỚC 2: AGENT XỬ LÝ ===
-    response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
-    return st.write_stream(response_generator)
+    response = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
+    if isinstance(response, dict) and "dataframe" in response:
+        return _render_structured_response(response)
+    if isinstance(response, str):
+        st.write(response)
+        return response
+    return st.write_stream(response)
 
 # ============================================================
 # RISO DESIGN SYSTEM — Tokens from DESIGN.md
