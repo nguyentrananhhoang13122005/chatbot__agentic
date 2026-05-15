@@ -9,6 +9,7 @@ data/*.xlsx
 data/*.pdf
 data/*.json
 data/*.db
+chat_history.db
 data/1.*/
 data/2.*/
 data/3.*/

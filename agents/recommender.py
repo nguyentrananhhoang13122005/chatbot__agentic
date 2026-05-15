@@ -293,37 +293,16 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
         all_schools = df_verified['Trường'].dropna().unique().tolist()
         all_matches = find_matching_schools(truong, all_schools, location=pre_extracted_location)
 
-        # Nếu nhiều trường khớp → thử smart disambiguation trước khi hỏi lại
+        # Nếu nhiều trường khớp → HỎI LẠI, không đoán mò
         if len(all_matches) > 1:
-            # --- Smart Disambiguation: chọn trường "gần nhất" nếu rõ ràng ---
-            # Đếm số token "thừa" mỗi trường có so với query
-            # VD: query="Cần Thơ" → "ĐH Cần Thơ"(2 thừa) vs "ĐH Y Dược Cần Thơ"(4 thừa)
-            query_norm = _normalize_school_name(truong)
-            query_tokens = set(_tokenize_vn(query_norm))
-
-            scored_matches = []
-            for s in all_matches:
-                s_norm = _normalize_school_name(s)
-                s_tokens = set(_tokenize_vn(s_norm))
-                extra_tokens = len(s_tokens - query_tokens)
-                scored_matches.append((s, extra_tokens))
-
-            scored_matches.sort(key=lambda x: x[1])
-
-            if scored_matches[0][1] < scored_matches[1][1]:
-                # Best match rõ ràng hơn runner-up → dùng nó, không cần hỏi lại
-                truong = scored_matches[0][0]
-                print(f"DEBUG [Guard 0]: Smart disambig → '{truong}' (extra={scored_matches[0][1]} vs {scored_matches[1][1]})")
-            else:
-                # Vẫn mơ hồ (VD: "Bách Khoa" → HN và ĐN cùng mức) → hỏi lại
-                school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
-                return (
-                    f"🤖 **[Recommender Agent]**\n\n"
-                    f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
-                    f"{school_list_str}\n\n"
-                    f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
-                    f"(VD: *\"{all_matches[0]}\"* hoặc *\"{all_matches[-1]}\"*)"
-                )
+            school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
+            return (
+                f"🤖 **[Recommender Agent]**\n\n"
+                f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
+                f"{school_list_str}\n\n"
+                f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
+                f"(VD: *\"{all_matches[0]}\"* hoặc *\"{all_matches[-1]}\"*)"
+            )
 
     # ======== BƯỚC 1B: TRA CỨU CHÉO (CROSS-SCHOOL) — Khi truong=ALL + có keyword ========
     # Xử lý câu hỏi dạng "Top 5 trường CNTT", "ngành Y điểm cao nhất", "so sánh ngành kinh tế"
@@ -429,17 +408,19 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if llm_error_info:
                 return f"{prefix_cross}{llm_error_info['message']}"
 
-    # ======== QUYẾT ĐỊNH DỮ LIỆU: 2026 DATS hay 2025 ĐIỂM CHUẨN? ========
-    # Câu hỏi về "điểm chuẩn" → ưu tiên 2025 verified (có số liệu thực)
-    # Câu hỏi về "tuyển sinh/phương thức/chỉ tiêu/ngành" → ưu tiên 2026 DATS
+    # ======== QUYẾT ĐỊNH DỮ LIỆU: TÌM KIẾM TOÀN BỘ 3 NĂM ========
+    # Luồng: DATS (2026→2025→2024) → Verified DB → OCR
+    # CHỈ trả lời "không có dữ liệu" khi ĐÃ TÌM HẾT TẤT CẢ data sources
     query_lower = user_query.lower()
     is_score_query = any(kw in query_lower for kw in ['điểm chuẩn', 'điểm', 'bao nhiêu điểm', 'điểm trúng tuyển'])
-    is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký', 'học phí', 'ngành'])
+    is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký', 'học phí', 'ngành', 'học bổng', 'ký túc'])
+
+    # Flag theo dõi: đã tìm thấy và trả lời từ nguồn nào chưa?
+    dats_answered = False
 
     # ======== BƯỚC 1: TRA CỨU DATS — TỰ ĐỘNG TÌM NĂM CÓ DỮ LIỆU PHÙ HỢP ========
-    # Quy tắc MỚI: Nếu năm target không có thông tin user hỏi → TỰ ĐỘNG tìm năm khác có dữ liệu.
-    # Không bắt user hỏi lại — proactively tìm và trả lời luôn.
-    if df_dats is not None and not df_dats.empty and truong != "ALL" and (is_admission_query or not is_score_query):
+    # Luôn thử DATS trước cho MỌI loại câu hỏi (admission + score)
+    if df_dats is not None and not df_dats.empty and truong != "ALL":
 
         # Xác định năm tìm kiếm
         if nam > 0:
@@ -455,15 +436,25 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         else:
             matched_check = find_matching_schools(truong, list_check, strict=True, location=pre_extracted_location)
             
+        available_years = []
         best_match = None
         if len(matched_check) == 1:
             s = matched_check[0]
-            row = df_dats[df_dats['Trường'] == s].iloc[0]
-            y = row['Năm']
-            content = row.get('Nội dung', '')
-            if content and len(content) >= 50:
-                best_match = (y, s, content)
-                print(f"DEBUG [Recommender]: Found '{s}' in DATS Master (year {y})")
+            school_rows = df_dats[df_dats['Trường'] == s]
+            
+            for _, r in school_rows.iterrows():
+                available_years.append((r['Năm'], s))
+                
+            target_row = school_rows[school_rows['Năm'] == target_year]
+            if not target_row.empty and len(str(target_row.iloc[0].get('Nội dung', ''))) >= 50:
+                best_match = (target_year, s, target_row.iloc[0].get('Nội dung', ''))
+            elif not school_rows.empty:
+                row = school_rows.iloc[0]
+                if len(str(row.get('Nội dung', ''))) >= 50:
+                    best_match = (row['Năm'], s, row.get('Nội dung', ''))
+            
+            if best_match:
+                print(f"DEBUG [Recommender]: Found '{s}' in DATS Master (year {best_match[0]})")
 
         # --- Helper: Smart content extraction ---
         def _extract_content_for_llm(content: str, query_lc: str) -> str:
@@ -528,15 +519,16 @@ THÔNG TIN TUYỂN SINH NĂM {search_year} CỦA TRƯỜNG {school_found}:
 {content_for_llm}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
-4. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} không có thông tin về [chủ đề]."
-5. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí. TUYỆT ĐỐI KHÔNG cắt ngắn.
-6. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
-7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
-8. KHÔNG hiển thị cột trống.
-9. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời (VD: phương thức xét tuyển, điểm chuẩn, chỉ tiêu, ngành đào tạo)."""
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận, KHÔNG bịa số liệu.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG liệt kê thông tin thừa.
+3. Khi trích dẫn SỐ LIỆU (học phí, chỉ tiêu, mã ngành, điểm), phải GHI ĐÚNG CON SỐ từ dữ liệu gốc. Nếu dữ liệu ghi "28,700,000 VNĐ" thì phải ghi đúng "28,700,000 VNĐ".
+4. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
+5. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} của trường này không có thông tin về [chủ đề]."
+6. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí đúng nguyên văn từ dữ liệu.
+7. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
+8. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
+9. KHÔNG hiển thị cột trống.
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ liên quan đến trường {school_found} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
             dats_prefix = f"🤖 **[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
             if fell_back:
                 dats_prefix += f"{fallback_note}\n\n"
@@ -559,8 +551,10 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 max_tokens=4096,
             )
             if llm_answer:
+                dats_answered = True
                 return f"{dats_prefix}{llm_answer}{dats_suffix}"
             if llm_error_info:
+                dats_answered = True
                 return (
                     f"{dats_prefix}"
                     f"{llm_error_info['message']}\n\n"
@@ -568,9 +562,17 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     f"Vui lòng thử lại sau vài phút."
                 )
 
-        elif df_dats is not None:
-            # Không có trong DATS Master
-            pass
+        elif available_years:
+            # Không có dữ liệu nào đủ dài → NÓI RÕ + gợi ý năm khác
+            other_info = "\n".join([f"  - **Năm {y}**: {s}" for y, s in available_years])
+            first_year, first_school = available_years[0]
+            return (
+                f"🤖 **[Recommender Agent]**\n\n"
+                f"⚠️ **Trường \"{truong}\" chưa có dữ liệu tuyển sinh năm {target_year}** trong hệ thống.\n\n"
+                f"Tuy nhiên, tôi tìm thấy dữ liệu của trường này ở các năm khác:\n\n"
+                f"{other_info}\n\n"
+                f"👉 Hãy hỏi lại kèm năm cụ thể, VD: *\"{user_query} năm {first_year}\"*"
+            )
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
     if df_verified is not None and not df_verified.empty and truong != "ALL":
@@ -615,16 +617,21 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if vf_match.empty:
                 vf_match = vf_school
 
-            # --- Lọc theo năm ---
-            if nam > 0 and 'Năm' in vf_match.columns:
+            # --- Lọc theo năm: ưu tiên năm mới nhất (2026 → 2025 → 2024) ---
+            year_fallback_note = ""
+            if 'Năm' in vf_match.columns:
                 vf_match.loc[:, 'Năm_Num'] = pd.to_numeric(vf_match['Năm'], errors='coerce').fillna(0)
-                vf_match_year = vf_match[vf_match['Năm_Num'] == nam]
+                target = nam if nam > 0 else 2026
+                vf_match_year = vf_match[vf_match['Năm_Num'] == target]
                 if not vf_match_year.empty:
                     vf_match = vf_match_year
                 else:
+                    # Tự động lấy năm mới nhất có dữ liệu
                     latest_year = vf_match['Năm_Num'].max()
                     if latest_year > 0:
                         vf_match = vf_match[vf_match['Năm_Num'] == latest_year]
+                        if nam > 0 and latest_year != nam:
+                            year_fallback_note = f"\n\n⚠️ *Dữ liệu năm {nam} chưa có. Hệ thống tự động sử dụng dữ liệu năm {int(latest_year)} (năm mới nhất có sẵn).*"
                 vf_match = vf_match.drop(columns=['Năm_Num'], errors='ignore')
 
             if not vf_match.empty:
@@ -662,16 +669,16 @@ DỮ LIỆU CHÍNH THỨC CỦA TRƯỜNG {school_name} (dạng CSV):
 THỐNG KÊ: {stats}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường — mọi phương thức xét tuyển đều do trường công bố.
-4. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
-5. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
-6. Nếu hỏi chung chung → tóm tắt ngắn gọn.
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU CSV ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận thêm, KHÔNG bịa thông tin.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
+3. Khi trích dẫn ĐIỂM CHUẨN, phải GHI ĐÚNG CON SỐ từ cột "Điểm chuẩn" trong CSV. VD: nếu CSV ghi 25.5 thì trả lời 25.5, KHÔNG làm tròn. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường.
+4. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm CHÍNH XÁC theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
+5. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
+6. Nếu hỏi chung chung → tóm tắt ngắn gọn dựa trên thống kê.
 {table_rule}
 8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu (VD: "Điểm chuẩn **năm 2025**").
-9. Nếu người dùng hỏi thông tin KHÔNG CÓ trong dữ liệu → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
-10. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời (VD: điểm chuẩn ngành X, phương thức xét tuyển, so sánh điểm chuẩn năm trước)."""
+9. Nếu dữ liệu CSV KHÔNG CÓ thông tin user hỏi → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường {school_name} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
@@ -697,7 +704,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     print("DEBUG [Recommender]: LLM OK")
 
                 if llm_answer:
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
+                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{year_fallback_note}{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
 
                 # === SMART FALLBACK: Không dùng LLM, phân tích bằng Pandas ===
                 print("DEBUG [Recommender]: All LLM models failed, using smart fallback")
@@ -868,7 +875,7 @@ QUY TẮC TRẢ LỜI:
         context_data = context_data[:5000] + "\n...[Dữ liệu bị lược bỏ do giới hạn Token]...\n" + context_data[-5000:]
 
     # ======== BƯỚC 3: LLM SYNTHESIS (PROMPT CỨNG - ĐA DẠNG FORMAT) ========
-    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. Trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới.
+    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. CHỈ trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng.
 
 CÂU HỎI: "{user_query}"
 
@@ -884,14 +891,13 @@ CÁCH ĐỌC ĐÚNG:
 3. ĐIỂM TRÚNG TUYỂN thường là cột CUỐI CÙNG trong mỗi nhóm (Năm 2024, Năm 2023).
 
 QUY TẮC OUTPUT BẮT BUỘC:
-1. Trả lời CHÍNH XÁC trọng tâm câu hỏi. TUYỆT ĐỐI không đưa thông tin thừa. Nếu người dùng hỏi một ngành cụ thể, CHỈ trả lời về ngành đó, không liệt kê tất cả các ngành. Nếu người dùng hỏi chung chung về điểm chuẩn, thì mới liệt kê dưới dạng BẢNG MARKDOWN.
-2. KHÔNG viết bài luận, KHÔNG quảng cáo trường, KHÔNG bịa thông tin.
-3. Cấu trúc bảng (nếu cần dùng bảng): | Mã ngành | Tên ngành | Phương thức | Điểm chuẩn | Chỉ tiêu |
-4. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Hãy ưu tiên báo cáo số liệu của năm {nam}. Nếu không có năm {nam}, hãy CẢNH BÁO rõ là không có và báo cáo năm gần nhất.' if nam > 0 else ''}
-5. Nếu KHÔNG tìm thấy dữ liệu điểm: Trả lời "Không tìm thấy dữ liệu điểm trúng tuyển."
-6. Câu hỏi về thông tin chung (vị trí, học phí): Được dùng kiến thức chung, trả lời ngắn gọn.
-7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời.
-
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG suy luận, KHÔNG dùng kiến thức riêng, KHÔNG bịa số liệu.
+2. Trả lời CHÍNH XÁC trọng tâm câu hỏi. Nếu hỏi một ngành → CHỈ trả lời về ngành đó. Nếu hỏi chung → BẢNG MARKDOWN.
+3. Khi trích dẫn số liệu (điểm, chỉ tiêu), GHI ĐÚNG con số từ dữ liệu gốc.
+4. KHÔNG viết bài luận, KHÔNG quảng cáo trường.
+5. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Ưu tiên số liệu năm {nam}. Nếu không có năm {nam}, CẢNH BÁO rõ và báo cáo năm gần nhất.' if nam > 0 else ''}
+6. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu hiện tại không có thông tin về [chủ đề]."
+7. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ mà hệ thống có dữ liệu, PHÙ HỢP với nhu cầu ban đầu.
 
 DỮ LIỆU:
 {context_data}"""

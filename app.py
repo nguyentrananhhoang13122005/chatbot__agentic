@@ -17,7 +17,7 @@ from agents.counselor import (
 from chat_db import (
     init_db, new_session_id, save_session, list_sessions,
     load_session, delete_session, toggle_bookmark,
-    cleanup_old_sessions, clear_all_sessions, format_session_date,
+    cleanup_old_sessions, clear_all_sessions, format_session_date, rename_session
 )
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
@@ -278,25 +278,141 @@ def load_custom_css():
         min-width: 320px!important; width: 320px!important;
     }
     [data-testid="stSidebar"] > div:first-child { padding-top: var(--sp-4)!important; }
-    [data-testid="stSidebar"] > div * {
+    [data-testid="stSidebar"] > div *:not(.material-symbols-rounded) {
         font-family: var(--font-sans)!important;
-        color: var(--text)!important;
+    }
+    [data-testid="stSidebar"] > div * {
+        color: var(--text);
     }
 
-    /* === HISTORY ITEM STYLE === */
-    .history-item {
-        display: flex; align-items: center; gap: 6px;
-        padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.06);
+    /* === HISTORY ITEM STYLE (Minimal & Flat) === */
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) {
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        padding: 2px 0;
+        margin-bottom: 2px;
     }
-    .history-item .hi-title {
-        flex: 1; font-size: 14px; font-weight: 500;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker):hover {
+        background: rgba(0,0,0,0.04);
     }
-    .history-item .hi-date {
-        font-family: var(--font-mono); font-size: 11px;
-        color: #888; white-space: nowrap;
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) {
+        background: rgba(44, 64, 167, 0.08);
+        border-left: 3px solid var(--primary);
+        border-radius: 0 8px 8px 0;
     }
-    .history-item .hi-pin { font-size: 12px; }
+
+    /* External timestamp below history item */
+    .hist-time {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: #888;
+        font-weight: 500;
+        padding: 2px 8px 6px;
+        line-height: 1;
+        letter-spacing: 0.3px;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) + div .hist-time {
+        color: var(--secondary);
+        font-weight: 600;
+    }
+    
+    /* Title Button (Left Aligned, Flat) */
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:first-child div.stButton > button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: var(--text) !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        padding: 4px 8px !important;
+        min-height: 32px !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:first-child div.stButton > button p {
+        font-weight: 500 !important;
+        font-size: 14px !important;
+        white-space: pre-wrap !important;
+        line-height: 1.4 !important;
+        margin: 0 !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) div[data-testid="column"]:first-child div.stButton > button p {
+        font-weight: 700 !important;
+        color: var(--secondary) !important;
+    }
+    
+    /* Popover button (3 dots) — override Streamlit's emotion-cache white bg & overflow:hidden */
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:last-child button,
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        padding: 0 !important;
+        min-height: 32px !important;
+        width: 32px !important;
+        opacity: 0.6;
+        transition: all 0.2s ease;
+        position: relative !important;
+        overflow: visible !important;
+    }
+    
+    /* Hide ALL child elements inside the popover button */
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button * {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    
+    /* Inject 3 dots via ::after pseudo-element */
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button::after {
+        content: "⋮";
+        color: #666 !important;
+        font-size: 22px !important;
+        font-weight: bold !important;
+        line-height: 32px !important;
+        text-align: center !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        pointer-events: none !important;
+    }
+    
+    /* Hover effects */
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:last-child button:hover,
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover {
+        opacity: 1;
+        background: rgba(0,0,0,0.05) !important;
+        border-radius: 6px;
+    }
+    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover::after {
+        color: var(--primary) !important;
+    }
+    
+    /* Popover Menu Items */
+    div[data-testid="stPopoverBody"] div.stButton > button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: var(--text) !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        font-size: 14px !important;
+        padding: 8px 12px !important;
+        width: 100% !important;
+        border-radius: 4px !important;
+    }
+    div[data-testid="stPopoverBody"] div.stButton > button:hover {
+        background: rgba(0,0,0,0.05) !important;
+    }
 
     /* === BUTTONS (vivid pink actions) === */
     div.stButton > button[kind="primary"],
@@ -726,42 +842,94 @@ def render_sidebar():
             for sess in recent_sessions:
                 sid = sess["id"]
                 is_current = (sid == st.session_state.get("session_id"))
-                date_label = format_session_date(sess["updated_at"])
-                pin = "📌 " if sess["bookmarked"] else ""
-                prefix = "▸ " if is_current else ""
+                
+                with st.container():
+                    st.markdown(f'<div class="hist-row-marker {"active" if is_current else ""}"></div>', unsafe_allow_html=True)
+                    
+                    # Tính toán thời gian trước khi render
+                    import datetime
+                    time_str = ""
+                    try:
+                        dt_str = str(sess["updated_at"]).replace("Z", "")
+                        dt = datetime.datetime.fromisoformat(dt_str)
+                        now = datetime.datetime.now()
+                        if dt.date() == now.date():
+                            time_str = f"Hôm nay, {dt.strftime('%H:%M')}"
+                        elif dt.date() == (now - datetime.timedelta(days=1)).date():
+                            time_str = f"Hôm qua, {dt.strftime('%H:%M')}"
+                        else:
+                            time_str = dt.strftime("%d/%m/%Y, %H:%M")
+                    except Exception:
+                        time_str = ""
 
-                # Tiêu đề phiên + ngày giờ
-                title_display = f"{prefix}{pin}{sess['title']}"
-                if st.button(f"💬 {title_display}", key=f"load_{sid}", use_container_width=True, type="secondary"):
-                    if st.session_state.messages:
-                        save_session(st.session_state.session_id, st.session_state.messages)
-                    st.session_state.session_id = sid
-                    st.session_state.messages = load_session(sid)
-                    st.session_state.page = "chat"
-                    st.rerun()
+                    if st.session_state.get("rename_sid") == sid:
+                        new_name = st.text_input("Đổi tên", value=sess['title'], key=f"rn_in_{sid}", label_visibility="collapsed")
+                        c1, c2 = st.columns(2)
+                        if c1.button("Lưu", key=f"sv_{sid}", use_container_width=True):
+                            if new_name.strip():
+                                rename_session(sid, new_name.strip())
+                            st.session_state.rename_sid = None
+                            st.rerun()
+                        if c2.button("Hủy", key=f"cc_{sid}", use_container_width=True):
+                            st.session_state.rename_sid = None
+                            st.rerun()
+                    else:
+                        col1, col2 = st.columns([8, 1.5], vertical_alignment="center")
+                        with col1:
+                            pin_icon = "📌 " if sess["bookmarked"] else ""
+                            # Giới hạn độ dài tiêu đề
+                            display_title = sess['title']
+                            if len(display_title) > 25: display_title = display_title[:22] + "..."
+                            
+                            btn_label = f"{pin_icon}{display_title}"
+                            
+                            if st.button(btn_label, key=f"load_{sid}", use_container_width=True):
+                                if st.session_state.messages:
+                                    save_session(st.session_state.session_id, st.session_state.messages)
+                                st.session_state.session_id = sid
+                                st.session_state.messages = load_session(sid)
+                                st.session_state.page = "chat"
+                                st.rerun()
+                        with col2:
+                            with st.popover("⋮", use_container_width=True):
+                                pin_label = "Bỏ ghim" if sess["bookmarked"] else "Ghim"
+                                if st.button(f"📌 {pin_label}", key=f"bm_{sid}", use_container_width=True):
+                                    toggle_bookmark(sid)
+                                    st.rerun()
+                                if st.button("✏️ Đổi tên", key=f"rn_btn_{sid}", use_container_width=True):
+                                    st.session_state.rename_sid = sid
+                                    st.rerun()
+                                if st.session_state.get("confirm_delete_sid") == sid:
+                                    st.warning("Bạn có chắc muốn xóa?")
+                                    cd1, cd2 = st.columns(2)
+                                    if cd1.button("⚠️ Xác nhận", key=f"cf_del_{sid}", use_container_width=True):
+                                        delete_session(sid)
+                                        st.session_state.pop("confirm_delete_sid", None)
+                                        if sid == st.session_state.get("session_id"):
+                                            st.session_state.session_id = new_session_id()
+                                            st.session_state.messages = []
+                                        st.rerun()
+                                    if cd2.button("↩️ Hủy", key=f"cc_del_{sid}", use_container_width=True):
+                                        st.session_state.pop("confirm_delete_sid", None)
+                                        st.rerun()
+                                else:
+                                    if st.button("🗑️ Xóa", key=f"del_{sid}", use_container_width=True):
+                                        st.session_state.confirm_delete_sid = sid
+                                        st.rerun()
 
-                # Hàng action: ngày + bookmark + xoá
-                ac1, ac2, ac3 = st.columns([5, 1, 1])
-                ac1.caption(date_label)
-                if ac2.button("📌" if sess["bookmarked"] else "🔖", key=f"bm_{sid}"):
-                    toggle_bookmark(sid)
-                    st.rerun()
-                if ac3.button("🗑️", key=f"del_{sid}"):
-                    delete_session(sid)
-                    if sid == st.session_state.get("session_id"):
-                        st.session_state.session_id = new_session_id()
-                        st.session_state.messages = []
-                    st.rerun()
+                    # Hiển thị thời gian NGOÀI khung border của history item
+                    if time_str:
+                        st.markdown(f'<div class="hist-time">{time_str}</div>', unsafe_allow_html=True)
 
         # ─── HỆ THỐNG ───
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
+        st.caption("💡 Phiên chưa ghim sẽ tự động xóa sau 20 ngày")
         if st.button("🧹 Xoá toàn bộ lịch sử", use_container_width=True, type="secondary"):
             clear_all_sessions()
             st.session_state.session_id = new_session_id()
             st.session_state.messages = []
             st.toast("✅ Đã xoá toàn bộ lịch sử chat.")
             st.rerun()
-        st.button("Trợ giúp", use_container_width=True, type="secondary")
 
 
 # === HOME PAGE ===

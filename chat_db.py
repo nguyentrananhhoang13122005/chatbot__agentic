@@ -138,6 +138,17 @@ def delete_session(session_id: str):
     conn.close()
 
 
+def rename_session(session_id: str, new_title: str):
+    """Đổi tên một phiên chat."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?",
+        (new_title, datetime.now().isoformat(), session_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def toggle_bookmark(session_id: str) -> bool:
     """Đảo trạng thái bookmark. Trả về trạng thái mới."""
     conn = _get_conn()
