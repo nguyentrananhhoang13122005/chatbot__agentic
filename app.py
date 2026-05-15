@@ -7,12 +7,21 @@ if sys.stdout.encoding != 'utf-8':
 
 from llm_client import validate_api_key
 from router import classify_query, dispatch_to_agent_stream
+from chat_db import (
+    init_db, new_session_id, save_session, list_sessions,
+    load_session, delete_session, toggle_bookmark,
+    cleanup_old_sessions, clear_all_sessions, format_session_date,
+)
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
+# === KHỞI TẠO DB & DỌN DẸP TỰ ĐỘNG ===
+init_db()
+cleanup_old_sessions(days=20)
+
 
 @st.cache_data(ttl=600, show_spinner=False)
-def _cached_validate_api_key():
+def _cached_validate_api_key_v2():
     return validate_api_key()
 
 
@@ -26,8 +35,15 @@ def _process_query(query: str, uploaded_cv=None):
         classification = classify_query(query, has_file, chat_history)
 
         intent = classification["intent"]
-        agent_name = "Recommender (Tra cứu điểm)" if intent == "RECOMMENDER" else "Counselor (Tư vấn hướng nghiệp)"
-        agent_icon = "📊" if intent == "RECOMMENDER" else "🧑‍🏫"
+        if intent == "GENERAL":
+            agent_name = "General AI (Trả lời chung)"
+            agent_icon = "🤖"
+        elif intent == "COUNSELOR":
+            agent_name = "Counselor (Tư vấn hướng nghiệp)"
+            agent_icon = "🧑‍🏫"
+        else:
+            agent_name = "Recommender (Tra cứu điểm)"
+            agent_icon = "📊"
 
         st.write(f"**Loại câu hỏi:** `{intent}`")
         st.write(f"**Giao cho:** {agent_icon} **{agent_name}**")
@@ -39,7 +55,7 @@ def _process_query(query: str, uploaded_cv=None):
         status.update(label=f"🎛️ Router → {agent_icon} {agent_name}", state="complete", expanded=False)
 
     # === BƯỚC 2: AGENT XỬ LÝ ===
-    response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv)
+    response_generator = dispatch_to_agent_stream(classification, query, uploaded_cv, chat_history)
     return st.write_stream(response_generator)
 
 # ============================================================
@@ -86,16 +102,65 @@ def load_custom_css():
         --riso-shadow-hover: 6px 6px 0px var(--primary);
     }
 
-    /* === HIDE STREAMLIT CHROME === */
-    [data-testid="stToolbar"], [data-testid="stDecoration"],
-    [data-testid="stAppDeployButton"],
-    footer, #MainMenu, div[class*="StatusWidget"],
-    header[data-testid="stHeader"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="collapsedControl"]
-    { display:none!important; visibility:hidden!important; }
+    /* STREAMLIT NATIVE CONTROLS PRESERVED & CUSTOMIZED */
     .block-container { padding-top:var(--sp-12)!important; max-width:100vw!important; }
+
+    /* Fix Material Icons Globally (prevents raw text like keyboard_double_arrow_right) */
+    span.material-symbols-rounded, 
+    span[data-testid="stIconMaterial"],
+    .material-icons {
+        font-family: "Material Symbols Rounded", "Material Icons", sans-serif !important;
+    }
+
+    /* Custom Sidebar Toggle Icons: Replace with ☰ and ✕ but keep buttons clickable */
+    [data-testid="collapsedControl"] button,
+    [data-testid="stSidebarCollapsedControl"] button,
+    [data-testid="stSidebarCollapseButton"] button,
+    button[data-testid="collapsedControl"],
+    button[data-testid="stSidebarCollapsedControl"],
+    button[data-testid="stSidebarCollapseButton"] {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        z-index: 9999 !important;
+        font-size: 0 !important;
+        color: transparent !important;
+    }
+    
+    /* Hide ONLY the inner contents (svg/span) so the button itself stays clickable */
+    [data-testid="collapsedControl"] button > *,
+    [data-testid="stSidebarCollapsedControl"] button > *,
+    [data-testid="stSidebarCollapseButton"] button > *,
+    button[data-testid="collapsedControl"] > *,
+    button[data-testid="stSidebarCollapsedControl"] > *,
+    button[data-testid="stSidebarCollapseButton"] > * {
+        display: none !important;
+    }
+    
+    /* Hamburger (☰) when collapsed */
+    [data-testid="collapsedControl"] button::after,
+    [data-testid="stSidebarCollapsedControl"] button::after,
+    button[data-testid="collapsedControl"]::after,
+    button[data-testid="stSidebarCollapsedControl"]::after {
+        content: '☰' !important;
+        font-size: 24px !important;
+        color: var(--text) !important;
+        font-family: var(--font-sans) !important;
+        padding: 4px;
+        visibility: visible !important;
+    }
+    
+    /* Close (✕) when expanded */
+    [data-testid="stSidebarCollapseButton"] button::after,
+    button[data-testid="stSidebarCollapseButton"]::after {
+        content: '✕' !important;
+        font-size: 20px !important;
+        color: var(--text) !important;
+        font-family: var(--font-sans) !important;
+        padding: 4px;
+        visibility: visible !important;
+    }
 
     /* === GLOBAL === */
     .stApp {
@@ -115,21 +180,33 @@ def load_custom_css():
     }
 
     /* === SIDEBAR (bold blue structure) === */
-    [data-testid="stSidebar"],
-    [data-testid="stSidebar"][aria-expanded="false"],
-    [data-testid="stSidebar"][aria-expanded="true"] {
+    [data-testid="stSidebar"] {
         background: var(--surface)!important;
         border-right: 2px solid var(--border)!important;
+    }
+    [data-testid="stSidebar"][aria-expanded="true"] {
         min-width: 320px!important; width: 320px!important;
-        display: flex!important; visibility: visible!important;
-        transform: none!important; opacity: 1!important;
-        position: relative!important; z-index: 999!important;
     }
     [data-testid="stSidebar"] > div:first-child { padding-top: var(--sp-4)!important; }
-    [data-testid="stSidebar"] * {
+    [data-testid="stSidebar"] > div * {
         font-family: var(--font-sans)!important;
         color: var(--text)!important;
     }
+
+    /* === HISTORY ITEM STYLE === */
+    .history-item {
+        display: flex; align-items: center; gap: 6px;
+        padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .history-item .hi-title {
+        flex: 1; font-size: 14px; font-weight: 500;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .history-item .hi-date {
+        font-family: var(--font-mono); font-size: 11px;
+        color: #888; white-space: nowrap;
+    }
+    .history-item .hi-pin { font-size: 12px; }
 
     /* === BUTTONS (vivid pink actions) === */
     div.stButton > button[kind="primary"],
@@ -162,6 +239,13 @@ def load_custom_css():
         background:var(--secondary)!important; color:var(--surface)!important;
         box-shadow: 4px 4px 0px var(--primary)!important;
         transform: translate(-2px, -2px)!important;
+    }
+    
+    /* Compact buttons in sidebar columns (bookmark, delete) */
+    [data-testid="stSidebar"] div[data-testid="column"] div.stButton > button {
+        padding: 4px!important; 
+        font-size: 14px!important;
+        min-height: 32px!important;
     }
 
     /* === SIDEBAR COMPONENTS === */
@@ -504,6 +588,8 @@ if "page" not in st.session_state:
     st.session_state.page = "home"
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "session_id" not in st.session_state:
+    st.session_state.session_id = new_session_id()
 
 
 # === SIDEBAR ===
@@ -528,21 +614,63 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
-            st.session_state.page = "home"
+            # Lưu phiên hiện tại trước khi tạo mới
+            if st.session_state.messages:
+                save_session(st.session_state.session_id, st.session_state.messages)
+            st.session_state.session_id = new_session_id()
             st.session_state.messages = []
+            st.session_state.page = "chat"
             st.rerun()
 
         if st.button("💬 Trò chuyện hiện tại", use_container_width=True, type="secondary"):
             st.session_state.page = "chat"
             st.rerun()
 
+        # ─── LỊCH SỬ GẦN ĐÂY (từ SQLite) ───
         st.markdown('<div class="sb-section">Lịch sử gần đây</div>', unsafe_allow_html=True)
-        st.button("Bách Khoa vs KHTN", use_container_width=True, type="secondary")
-        st.button("Ngành Marketing", use_container_width=True, type="secondary")
-        st.button("Mục đã lưu", use_container_width=True, type="secondary")
 
+        recent_sessions = list_sessions(limit=15)
+        if not recent_sessions:
+            st.caption("Chưa có lịch sử chat.")
+        else:
+            for sess in recent_sessions:
+                sid = sess["id"]
+                is_current = (sid == st.session_state.get("session_id"))
+                date_label = format_session_date(sess["updated_at"])
+                pin = "📌 " if sess["bookmarked"] else ""
+                prefix = "▸ " if is_current else ""
+
+                # Tiêu đề phiên + ngày giờ
+                title_display = f"{prefix}{pin}{sess['title']}"
+                if st.button(f"💬 {title_display}", key=f"load_{sid}", use_container_width=True, type="secondary"):
+                    if st.session_state.messages:
+                        save_session(st.session_state.session_id, st.session_state.messages)
+                    st.session_state.session_id = sid
+                    st.session_state.messages = load_session(sid)
+                    st.session_state.page = "chat"
+                    st.rerun()
+
+                # Hàng action: ngày + bookmark + xoá
+                ac1, ac2, ac3 = st.columns([5, 1, 1])
+                ac1.caption(date_label)
+                if ac2.button("📌" if sess["bookmarked"] else "🔖", key=f"bm_{sid}"):
+                    toggle_bookmark(sid)
+                    st.rerun()
+                if ac3.button("🗑️", key=f"del_{sid}"):
+                    delete_session(sid)
+                    if sid == st.session_state.get("session_id"):
+                        st.session_state.session_id = new_session_id()
+                        st.session_state.messages = []
+                    st.rerun()
+
+        # ─── HỆ THỐNG ───
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
-        st.button("Cài đặt", use_container_width=True, type="secondary")
+        if st.button("🧹 Xoá toàn bộ lịch sử", use_container_width=True, type="secondary"):
+            clear_all_sessions()
+            st.session_state.session_id = new_session_id()
+            st.session_state.messages = []
+            st.toast("✅ Đã xoá toàn bộ lịch sử chat.")
+            st.rerun()
         st.button("Trợ giúp", use_container_width=True, type="secondary")
 
 
@@ -698,7 +826,11 @@ def render_chat_page():
             st.write(pending)
         with st.chat_message("assistant", avatar="🤖"):
             response = _process_query(pending, uploaded_cv)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        if response:
+            st.session_state.messages.append({"role": "assistant", "content": str(response)})
+        # === AUTO-SAVE ===
+        if st.session_state.messages:
+            save_session(st.session_state.session_id, st.session_state.messages)
 
     # Xử lý câu hỏi nhập từ ô chat
     if prompt := st.chat_input("Nhập câu hỏi... (VD: Điểm chuẩn Bách Khoa 2024?)"):
@@ -707,12 +839,16 @@ def render_chat_page():
             st.write(prompt)
         with st.chat_message("assistant", avatar="🤖"):
             response = _process_query(prompt, uploaded_cv)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        if response:
+            st.session_state.messages.append({"role": "assistant", "content": str(response)})
+        # === AUTO-SAVE ===
+        if st.session_state.messages:
+            save_session(st.session_state.session_id, st.session_state.messages)
 
 
 # === RENDER ===
 load_custom_css()
-api_key_valid, api_key_error = _cached_validate_api_key()
+api_key_valid, api_key_error = _cached_validate_api_key_v2()
 if not api_key_valid:
     st.warning(api_key_error)
 render_sidebar()

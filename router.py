@@ -7,7 +7,7 @@ if sys.stdout.encoding != 'utf-8':
 
 from agents.recommender import query_diem_chuan, query_diem_chuan_stream
 from agents.counselor import tu_van_cv, tu_van_cv_stream
-from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm
+from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
 
 # ======== UNIFIED ANALYZER: 1 LLM CALL = Routing + Entity Extraction + Query Expansion ========
 ANALYZER_PROMPT = """Bạn là BỘ PHÂN TÍCH TRUNG TÂM (Analyzer) cho Hệ thống AI Tư vấn Tuyển sinh Đại học.
@@ -16,6 +16,7 @@ Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện
 1. PHÂN LOẠI (intent):
    - "RECOMMENDER": Tra cứu điểm chuẩn, tìm trường/ngành, hỏi chỉ tiêu, thông tin tuyển sinh, so sánh trường, hỏi về ngành phù hợp dựa trên điểm số.
    - "COUNSELOR": Tư vấn hướng nghiệp, đánh giá hồ sơ năng lực, phân tích CV, định hướng sở thích/tính cách.
+   - "GENERAL": Mọi câu hỏi KHÔNG liên quan tới tuyển sinh đại học Việt Nam hoặc tư vấn hướng nghiệp. VD: hỏi thời tiết, lập trình, lịch sử, toán học, chào hỏi xã giao, hỏi "bạn là ai", v.v.
    LƯU Ý: Nếu câu hỏi đề cập tới trường/ngành CỤ THỂ (kể cả qua "trường này", "ngành đó") → luôn là RECOMMENDER.
 
 2. TRÍCH XUẤT THỰC THỂ (entities — chỉ cho RECOMMENDER):
@@ -32,7 +33,7 @@ Nhiệm vụ: Đọc lịch sử hội thoại + câu hỏi mới, thực hiện
    Viết lại câu hỏi thành câu độc lập, giải tham chiếu "trường này" → tên trường thật, "ngành đó" → tên ngành thật dựa trên lịch sử.
 
 BẮT BUỘC trả về JSON duy nhất, KHÔNG giải thích:
-{"intent": "RECOMMENDER", "school": "...", "keyword": "...", "year": 0, "standalone_query": "..."}"""
+{"intent": "RECOMMENDER|COUNSELOR|GENERAL", "school": "...", "keyword": "...", "year": 0, "standalone_query": "..."}"""
 
 
 # ======== BƯỚC 1: PHÂN LOẠI CÂU HỎI (Classification Only) ========
@@ -115,16 +116,61 @@ Người dùng có đính kèm file CV?: {"Có file" if has_file else "Không c�
     }
 
 
+# ======== GENERAL LLM PROMPT ========
+GENERAL_SYSTEM_PROMPT = """Bạn là UniSearch AI — trợ lý thông minh đa năng.
+Bạn chuyên về tuyển sinh đại học Việt Nam, nhưng cũng có thể trả lời các câu hỏi kiến thức chung.
+Hãy trả lời ngắn gọn, chính xác, thân thiện bằng tiếng Việt.
+Nếu câu hỏi liên quan đến tuyển sinh, hãy nhắc người dùng rằng họ có thể hỏi trực tiếp về điểm chuẩn, ngành học, hoặc so sánh trường để được hỗ trợ chuyên sâu hơn."""
+
+
+def _general_llm_answer(user_query: str, chat_history: list = None) -> str:
+    """Gọi LLM trực tiếp để trả lời câu hỏi chung không liên quan đến data tuyển sinh."""
+    messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
+    if chat_history:
+        for msg in chat_history[-4:]:
+            messages.append({"role": msg["role"], "content": msg["content"][:500]})
+    messages.append({"role": "user", "content": user_query})
+
+    content, error_info = call_llm(
+        messages=messages,
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.5,
+        max_tokens=1024,
+    )
+    if content:
+        return content
+    return error_info["message"] if error_info else "⚠️ Không thể xử lý câu hỏi lúc này."
+
+
+def _general_llm_stream(user_query: str, chat_history: list = None):
+    """Gọi LLM stream trực tiếp để trả lời câu hỏi chung."""
+    messages = [{"role": "system", "content": GENERAL_SYSTEM_PROMPT}]
+    if chat_history:
+        for msg in chat_history[-4:]:
+            messages.append({"role": msg["role"], "content": msg["content"][:500]})
+    messages.append({"role": "user", "content": user_query})
+
+    return call_llm_stream(
+        messages=messages,
+        model=OPENROUTER_FALLBACK_MODELS[0],
+        temperature=0.5,
+        max_tokens=1024,
+    )
+
+
 # ======== BƯỚC 2: GIAO VIỆC CHO ĐÚNG AGENT (Dispatch Only) ========
-def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None) -> str:
+def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None, chat_history: list = None) -> str:
     """
     Router Section 2: Dựa trên kết quả phân loại, giao việc cho đúng Agent.
     - RECOMMENDER → agents/recommender.py (Tra cứu điểm chuẩn)
     - COUNSELOR  → agents/counselor.py (Tư vấn hướng nghiệp)
+    - GENERAL    → LLM trực tiếp (câu hỏi chung)
     """
     intent = classification.get("intent", "RECOMMENDER")
 
-    if intent == "COUNSELOR":
+    if intent == "GENERAL":
+        return _general_llm_answer(user_query, chat_history)
+    elif intent == "COUNSELOR":
         return tu_van_cv(cv_file=uploaded_file, user_query=user_query)
     else:
         return query_diem_chuan(
@@ -135,13 +181,15 @@ def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None)
         )
 
 
-def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_file=None):
+def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_file=None, chat_history: list = None):
     """
     Router Section 2 Streaming: Dựa trên kết quả phân loại, giao việc cho đúng Agent và trả về generator.
     """
     intent = classification.get("intent", "RECOMMENDER")
 
-    if intent == "COUNSELOR":
+    if intent == "GENERAL":
+        return _general_llm_stream(user_query, chat_history)
+    elif intent == "COUNSELOR":
         return tu_van_cv_stream(cv_file=uploaded_file, user_query=user_query)
     else:
         return query_diem_chuan_stream(
@@ -156,5 +204,5 @@ def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_fil
 def route_query(user_query: str, has_file: bool = False, uploaded_file=None, chat_history: list = None) -> str:
     """Wrapper gọi classify → dispatch tuần tự."""
     classification = classify_query(user_query, has_file, chat_history)
-    return dispatch_to_agent(classification, user_query, uploaded_file)
+    return dispatch_to_agent(classification, user_query, uploaded_file, chat_history)
 

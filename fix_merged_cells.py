@@ -1,58 +1,73 @@
 import sys
-sys.stdout.reconfigure(encoding='utf-8')
-import pandas as pd
-import re
 import os
 import shutil
+import re
+import pandas as pd
 
-print("1. Đang sao lưu file gốc...")
-original_path = 'data/data_tuyensinh.csv'
-backup_path = 'data/data_tuyensinh_backup.csv'
-if not os.path.exists(backup_path):
-    shutil.copy2(original_path, backup_path)
-    print("   Đã tạo bản backup: data_tuyensinh_backup.csv")
+sys.stdout.reconfigure(encoding='utf-8')
 
-print("2. Đang load dữ liệu (có thể mất vài chục giây vì file lớn)...")
-df = pd.read_csv(original_path, low_memory=False).fillna("")
-
-# Tìm cột cuối cùng để nhồi dữ liệu
-last_col = df.columns[-1]
-
-print("3. Đang xử lý Hidden Column Injection...")
-current_school = ""
-current_major_code = ""
-injected_count = 0
-
-# Regex tìm mã ngành: chuỗi bắt đầu bằng 7 và có 7 chữ số (Mã ngành ĐH Việt Nam luôn bắt đầu bằng 7)
-major_code_pattern = re.compile(r'\b7\d{6}\b')
-
-for index, row in df.iterrows():
-    school = str(row['Tên Trường']).strip()
+def main():
+    print("1. Đang sao lưu file gốc...")
+    original_path = 'data/data_tuyensinh.csv'
+    backup_path = 'data/data_tuyensinh_backup.csv'
     
-    # Nếu chuyển sang trường khác, reset mã ngành tạm
-    if school != current_school:
-        current_school = school
-        current_major_code = ""
+    if not os.path.exists(original_path):
+        print(f"Lỗi: Không tìm thấy file {original_path}")
+        return
+
+    if not os.path.exists(backup_path):
+        shutil.copy2(original_path, backup_path)
+        print("   Đã tạo bản backup: data_tuyensinh_backup.csv")
+
+    print("2. Đang load dữ liệu...")
+    df = pd.read_csv(original_path, low_memory=False).fillna("")
+
+    if df.empty:
+        print("File CSV trống.")
+        return
+
+    last_col = df.columns[-1]
+    school_col_idx = df.columns.get_loc('Tên Trường') if 'Tên Trường' in df.columns else -1
+    
+    if school_col_idx == -1:
+         print("Lỗi: Không tìm thấy cột 'Tên Trường'")
+         return
+
+    print("3. Đang xử lý Hidden Column Injection...")
+    current_school = ""
+    current_major_code = ""
+    injected_count = 0
+    
+    major_code_pattern = re.compile(r'\b7\d{6}\b')
+    
+    last_col_values = df[last_col].tolist()
+    school_values = df['Tên Trường'].tolist()
+    records = df.values.tolist()
+    
+    for i, row in enumerate(records):
+        school = str(school_values[i]).strip()
         
-    row_str = " | ".join([str(val) for val in row.values])
-    
-    # Tìm mã ngành trong dòng hiện tại
-    found_codes = major_code_pattern.findall(row_str)
-    
-    if found_codes:
-        # Nếu dòng có chứa mã ngành -> Cập nhật mã ngành hiện tại
-        current_major_code = found_codes[0]
-    else:
-        # Nếu dòng KHÔNG chứa mã ngành, nhưng ta đang giữ một mã ngành trong bộ nhớ
-        # Chứng tỏ đây là dòng Merged Cells (phương thức phụ của mã ngành phía trên)
-        if current_major_code != "":
-            # Nhồi mã ngành vào cột cuối cùng
-            df.at[index, last_col] = f"[HIDDEN_CODE: {current_major_code}]"
+        if school != current_school:
+            current_school = school
+            current_major_code = ""
+            
+        row_str = " | ".join(map(str, row))
+        found_codes = major_code_pattern.findall(row_str)
+        
+        if found_codes:
+            current_major_code = found_codes[0]
+        elif current_major_code:
+            last_col_values[i] = f"[HIDDEN_CODE: {current_major_code}]"
             injected_count += 1
+            
+    df[last_col] = last_col_values
+    
+    print(f"4. Đã bơm thành công mã ngành ẩn cho {injected_count} dòng bị khuyết!")
+    
+    print("5. Đang lưu lại file data_tuyensinh.csv...")
+    df.to_csv(original_path, index=False, encoding='utf-8-sig')
+    
+    print("HOÀN THÀNH! Hệ thống RAG giờ đây có thể quét trúng mọi dòng Merged Cells.")
 
-print(f"4. Đã bơm thành công mã ngành ẩn cho {injected_count} dòng bị khuyết!")
-
-print("5. Đang lưu lại file data_tuyensinh.csv...")
-df.to_csv(original_path, index=False, encoding='utf-8-sig')
-
-print("HOÀN THÀNH! Hệ thống RAG giờ đây có thể quét trúng mọi dòng Merged Cells.")
+if __name__ == "__main__":
+    main()

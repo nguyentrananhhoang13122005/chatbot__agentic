@@ -20,6 +20,16 @@ client = OpenAI(
     timeout=10,
 )
 
+def _ensure_api_key():
+    global OPENROUTER_API_KEY
+    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "missing-openrouter-api-key":
+        load_dotenv(override=True)
+        OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+        if OPENROUTER_API_KEY:
+            client.api_key = OPENROUTER_API_KEY
+    return OPENROUTER_API_KEY
+
+
 FRIENDLY_ERROR_MESSAGES = {
     "missing_api_key": "⚠️ Chưa cấu hình OpenRouter API key. Vui lòng thêm OPENROUTER_API_KEY vào file môi trường trước khi dùng tính năng AI.",
     "unauthorized": "⚠️ OpenRouter API key không hợp lệ hoặc đã hết quyền truy cập. Vui lòng kiểm tra lại cấu hình API key.",
@@ -76,7 +86,8 @@ def _retry_delay(error_info: dict, attempt_index: int) -> int:
 
 
 def validate_api_key() -> tuple[bool, str]:
-    if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.strip():
+    key = _ensure_api_key()
+    if not key or not key.strip():
         return False, FRIENDLY_ERROR_MESSAGES["missing_api_key"]
 
     _, error_info = call_llm(
@@ -98,7 +109,8 @@ def call_llm(
     max_tokens: int | None = None,
     max_retries: int = 2,
 ) -> tuple[str | None, dict | None]:
-    if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.strip():
+    key = _ensure_api_key()
+    if not key or not key.strip():
         return None, _build_error_info("missing_api_key")
 
     models = model_list or OPENROUTER_FALLBACK_MODELS
@@ -165,7 +177,8 @@ def call_llm_stream(
     temperature: float = 0.1,
     max_tokens: int | None = None,
 ):
-    if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.strip():
+    key = _ensure_api_key()
+    if not key or not key.strip():
         yield FRIENDLY_ERROR_MESSAGES["missing_api_key"]
         return
 
