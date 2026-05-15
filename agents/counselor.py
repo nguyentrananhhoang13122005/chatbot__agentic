@@ -309,21 +309,25 @@ def retrieve_main_data() -> str:
 
 
 # ======== HAM CHINH: TU VAN HUONG NGHIEP ========
-def tu_van_cv(cv_file, user_query: str, stream_output: bool = False) -> str:
-    # 1. Tool 1: Đọc file (OCR ảnh hoặc parse PDF)
-    score_table = ""
-    if cv_file is not None:
-        raw_ocr = doc_file(cv_file)
-        print(f"DEBUG [tu_van_cv]: Raw OCR {len(raw_ocr)} chars")
+def process_cv_ocr(cv_file) -> tuple[str, str]:
+    """Phase A: OCR file → (raw_ocr, score_table). Tách riêng để app.py wrap st.status."""
+    if cv_file is None:
+        return "", ""
+    raw_ocr = doc_file(cv_file)
+    print(f"DEBUG [process_cv_ocr]: Raw OCR {len(raw_ocr)} chars")
+    
+    score_table = parse_cv_scores(raw_ocr)
+    print(f"DEBUG [process_cv_ocr]: Cleaned score table:\n{score_table}")
+    
+    return raw_ocr, score_table
 
-        # 1b. LLM Parser: Dọn OCR → bảng điểm sạch (Môn | Điểm)
-        score_table = _llm_parse_scores(raw_ocr)
-        print(f"DEBUG [tu_van_cv]: Cleaned score table:\n{score_table}")
 
-    # 2. Tool 2: Truy xuất database trường/ngành
-    main_db_context = retrieve_main_data()
+def parse_cv_scores(raw_ocr_text: str) -> str:
+    return _llm_parse_scores(raw_ocr_text)
 
-    # 3. Xây dựng prompt — tập trung HOÀN TOÀN vào môn học + điểm
+
+def _build_system_prompt(score_table: str, user_query: str, main_db_context: str) -> str:
+    """Helper xây dựng system prompt chung cho các mode."""
     if score_table:
         data_section = f"""BẢNG ĐIỂM HỌC BẠ (đã được làm sạch từ OCR):
 {score_table}
@@ -359,18 +363,44 @@ YÊU CẦU TRẢ LỜI:
 
 Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đầu bằng 🤖 **[Counselor Agent]**.
 """
+    return system_prompt
 
-    # 4. Gọi LLM phân tích và tư vấn
+
+def build_counselor_system_prompt(score_table: str, user_query: str, main_db_context: str) -> str:
+    return _build_system_prompt(score_table, user_query, main_db_context)
+
+
+def counselor_respond_stream_from_prompt(system_prompt: str, user_query: str):
+    return call_llm_stream(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_query}
+        ],
+        model=OPENROUTER_FALLBACK_MODELS[0],
+        temperature=0.3,
+        max_tokens=2000,
+    )
+
+
+def counselor_respond_stream(score_table: str, user_query: str):
+    """Phase B: Từ score_table đã xử lý → stream LLM response."""
+    main_db_context = retrieve_main_data()
+    system_prompt = _build_system_prompt(score_table, user_query, main_db_context)
+
+    return counselor_respond_stream_from_prompt(system_prompt, user_query)
+
+
+def tu_van_cv(cv_file, user_query: str, stream_output: bool = False) -> str:
+    # 1. Phase A: OCR
+    _, score_table = process_cv_ocr(cv_file)
+
+    # 2. Truy xuất dữ liệu & Build Prompt
+    main_db_context = retrieve_main_data()
+    system_prompt = build_counselor_system_prompt(score_table, user_query, main_db_context)
+
+    # 3. Gọi LLM phân tích và tư vấn
     if stream_output:
-        return call_llm_stream(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_query}
-            ],
-            model=OPENROUTER_FALLBACK_MODELS[0],
-            temperature=0.3,
-            max_tokens=2000,
-        )
+        return counselor_respond_stream_from_prompt(system_prompt, user_query)
 
     answer, error_info = call_llm(
         messages=[
