@@ -191,7 +191,7 @@ def load_custom_css():
     }
 
     /* STREAMLIT NATIVE CONTROLS PRESERVED & CUSTOMIZED */
-    .block-container { padding-top:var(--sp-12)!important; max-width:100vw!important; }
+    .block-container { padding-top:4rem!important; max-width:100vw!important; }
 
     /* Fix Material Icons Globally (prevents raw text like keyboard_double_arrow_right) */
     span.material-symbols-rounded, 
@@ -401,7 +401,7 @@ def load_custom_css():
     /* === HERO === */
     .hero {
         text-align:center; padding:var(--sp-32) var(--sp-24);
-        position:relative; margin-top: var(--sp-24);
+        position:relative; margin-top: 0;
     }
     .badge {
         font-family: var(--font-mono);
