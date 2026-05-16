@@ -53,3 +53,19 @@ Playful two-color risograph-inspired system with paper-like warmth, vivid pink a
 - **Surface (#FFFFFF):** Token from style foundations.
 - **Text (#111827):** Token from style foundations.
 - **Neutral (#FFFFFF):** Derived from the surface token for official format compatibility.
+
+## Dark Mode Colors
+
+- **Surface (#1A1A2E):** Deep blue-black background for dark mode.
+- **Paper (#16162A):** Darker variant for gradient backgrounds.
+- **Text (#F0F0F5):** Light text for readability on dark surfaces.
+- **Border (#3A3A5C):** Muted purple-gray border for dark mode.
+- **Neutral (#1A1A2E):** Matches dark surface.
+- **Primary (#F237A1):** Unchanged — vivid pink stays vibrant on dark.
+- **Secondary (#2C40A7):** Unchanged — bold blue stays vibrant on dark.
+- **Sidebar (#1E1E36):** Slightly lighter than surface for visual hierarchy.
+
+### Toggle Behavior
+- Default: Light mode (Riso paper-like warmth)
+- Toggle via sidebar button (🌙/☀️)
+- Persisted in `st.session_state` + `localStorage` for anti-flash

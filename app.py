@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import sys
 import io
 
@@ -153,6 +154,18 @@ def load_custom_css():
         
         /* Shadows for Risograph print effect */
         --riso-shadow: 4px 4px 0px var(--border);
+        --riso-shadow-hover: 6px 6px 0px var(--primary);
+    }
+
+    /* === DARK MODE VARIABLE OVERRIDES === */
+    html[data-theme="dark"] {
+        --surface: #1A1A2E;
+        --paper: #16162A;
+        --text: #F0F0F5;
+        --border: #3A3A5C;
+        --neutral: #1A1A2E;
+        
+        --riso-shadow: 4px 4px 0px rgba(242, 55, 161, 0.3);
         --riso-shadow-hover: 6px 6px 0px var(--primary);
     }
 
@@ -776,6 +789,294 @@ def load_custom_css():
     @keyframes spin-slow {
         100% { transform: rotate(360deg); }
     }
+
+    /* ============================================================
+       DARK MODE — Component Overrides
+       ============================================================ */
+
+    /* --- Global Background --- */
+    html[data-theme="dark"] .stApp {
+        background: linear-gradient(-45deg, var(--paper), rgba(242, 55, 161, 0.06), #1E1E36, rgba(44, 64, 167, 0.06))!important;
+    }
+    html[data-theme="dark"] .stApp,
+    html[data-theme="dark"] .main,
+    html[data-theme="dark"] section[data-testid="stMain"],
+    html[data-theme="dark"] html,
+    html[data-theme="dark"] body {
+        color: var(--text)!important;
+    }
+
+    /* --- Sidebar --- */
+    html[data-theme="dark"] [data-testid="stSidebar"] {
+        background: #1E1E36!important;
+        border-right: 2px solid var(--border)!important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] > div * {
+        color: var(--text);
+    }
+    html[data-theme="dark"] .sb-header {
+        background: #1E1E36;
+        border-bottom: 2px solid var(--border);
+    }
+    html[data-theme="dark"] .sb-tag {
+        color: var(--surface);
+    }
+    html[data-theme="dark"] .sb-user {
+        background: var(--surface);
+        border-color: var(--border);
+        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5);
+    }
+    html[data-theme="dark"] .sb-user:hover {
+        box-shadow: 5px 5px 0px var(--primary);
+    }
+    html[data-theme="dark"] .sb-uname { color: var(--text); }
+    html[data-theme="dark"] .sb-section {
+        color: var(--text);
+        border-bottom-color: var(--border);
+    }
+
+    /* --- History Items --- */
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker):hover {
+        background: rgba(255,255,255,0.05);
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) {
+        background: rgba(44, 64, 167, 0.15);
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:first-child div.stButton > button {
+        color: var(--text) !important;
+    }
+    html[data-theme="dark"] .hist-time { color: #888; }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button::after {
+        color: #aaa !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover {
+        background: rgba(255,255,255,0.08) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover::after {
+        color: var(--primary) !important;
+    }
+
+    /* --- Popover Menu --- */
+    html[data-theme="dark"] div[data-testid="stPopoverBody"] {
+        background: var(--surface) !important;
+        border-color: var(--border) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stPopoverBody"] div.stButton > button {
+        color: var(--text) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stPopoverBody"] div.stButton > button:hover {
+        background: rgba(255,255,255,0.08) !important;
+    }
+
+    /* --- Buttons --- */
+    html[data-theme="dark"] div.stButton > button[kind="secondary"],
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-secondary"] {
+        background: var(--surface)!important;
+        color: var(--text)!important;
+        border-color: var(--border)!important;
+        box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3)!important;
+    }
+    html[data-theme="dark"] div.stButton > button[kind="secondary"]:hover,
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-secondary"]:hover {
+        background: var(--secondary)!important;
+        color: #FFFFFF!important;
+        box-shadow: 4px 4px 0px var(--primary)!important;
+    }
+    html[data-theme="dark"] div.stButton > button[kind="primary"],
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-primary"] {
+        border-color: var(--border)!important;
+        box-shadow: var(--riso-shadow)!important;
+    }
+
+    /* --- Hero --- */
+    html[data-theme="dark"] .hero .desc {
+        background: var(--surface);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+        color: var(--text);
+    }
+    html[data-theme="dark"] .hero h1 { color: var(--text); }
+    html[data-theme="dark"] .hero .hl-pink { text-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
+    html[data-theme="dark"] .hero .hl-blue { text-shadow: 2px 2px 0px rgba(44, 64, 167, 0.3); }
+
+    /* --- Stats --- */
+    html[data-theme="dark"] .stat {
+        background: var(--surface);
+        border-color: var(--border);
+        box-shadow: 4px 4px 0px rgba(44, 64, 167, 0.4);
+    }
+    html[data-theme="dark"] .stat:hover {
+        box-shadow: 8px 12px 0px var(--primary);
+    }
+    html[data-theme="dark"] .stat-n { color: var(--text); text-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
+    html[data-theme="dark"] .stat-l { color: var(--text); }
+
+    /* --- Cards --- */
+    html[data-theme="dark"] .r-card {
+        background: var(--surface);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+    }
+    html[data-theme="dark"] .r-card:hover {
+        box-shadow: 8px 8px 0px var(--primary);
+    }
+    html[data-theme="dark"] .r-card-title { color: var(--text); }
+    html[data-theme="dark"] .r-card-desc { color: var(--text); }
+    html[data-theme="dark"] .r-card-num { background: var(--border); color: var(--text); }
+    html[data-theme="dark"] .r-card-icon { border-color: var(--border); box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
+    html[data-theme="dark"] .r-card.accent .r-card-num { background: var(--surface); color: var(--primary); }
+
+    /* --- Chat --- */
+    html[data-theme="dark"] .chat-hdr {
+        border-color: var(--border);
+        box-shadow: 4px 4px 0px rgba(242, 55, 161, 0.4);
+    }
+    html[data-theme="dark"] [data-testid="stChatMessage"] {
+        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        box-shadow: 3px 3px 0px rgba(242, 55, 161, 0.2)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatMessage"]:hover {
+        box-shadow: 5px 5px 0px rgba(44, 64, 167, 0.4)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatMessage"]:nth-child(even) {
+        background: var(--paper)!important;
+        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.3)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"] textarea {
+        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"] textarea::placeholder {
+        color: #888!important;
+        opacity: 1!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"] textarea:focus {
+        border-color: var(--primary)!important;
+        box-shadow: 4px 4px 0px rgba(242, 55, 161, 0.3)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"],
+    html[data-theme="dark"] [data-testid="stChatInput"] * {
+        background-color: var(--surface)!important;
+        border-color: var(--border)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"] button {
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] [data-testid="stChatInput"] button svg {
+        fill: var(--text)!important;
+        stroke: var(--text)!important;
+    }
+
+    /* --- File Uploader --- */
+    html[data-theme="dark"] [data-testid="stFileUploader"] section {
+        border-color: var(--secondary)!important;
+        background: var(--surface)!important;
+    }
+    html[data-theme="dark"] [data-testid="stFileUploader"] section * {
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] [data-testid="stFileUploader"] section button {
+        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] [data-testid="stFileUploader"] section button:hover {
+        background: var(--secondary)!important;
+        color: #FFFFFF!important;
+    }
+    html[data-theme="dark"] [data-testid="stFileUploader"] label { color: var(--text)!important; }
+    html[data-theme="dark"] [data-testid="stFileUploader"] small { color: var(--text)!important; }
+    html[data-theme="dark"] [data-testid="stFileUploader"] span { color: var(--text)!important; }
+
+    /* --- AI Thinking --- */
+    html[data-theme="dark"] .ai-thinking { color: var(--primary); }
+
+    /* --- Markdown & Text --- */
+    html[data-theme="dark"] [data-testid="stMarkdownContainer"] p { color: var(--text); }
+    html[data-theme="dark"] hr { border-color: var(--border)!important; }
+    html[data-theme="dark"] [data-testid="stCaptionContainer"] { color: #999!important; }
+
+    /* --- Streamlit Native Widgets Override --- */
+    html[data-theme="dark"] [data-testid="stTextInput"] input,
+    html[data-theme="dark"] [data-testid="stSelectbox"] > div,
+    html[data-theme="dark"] [data-testid="stMultiSelect"] > div {
+        background: var(--surface)!important;
+        color: var(--text)!important;
+        border-color: var(--border)!important;
+    }
+    html[data-theme="dark"] .stAlert {
+        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] [data-testid="stToast"] {
+        background: var(--surface)!important;
+        color: var(--text)!important;
+        border-color: var(--border)!important;
+    }
+
+    /* --- Sidebar Toggle Icons in Dark Mode --- */
+    html[data-theme="dark"] [data-testid="collapsedControl"] button::after,
+    html[data-theme="dark"] [data-testid="stSidebarCollapsedControl"] button::after,
+    html[data-theme="dark"] button[data-testid="collapsedControl"]::after,
+    html[data-theme="dark"] button[data-testid="stSidebarCollapsedControl"]::after {
+        color: var(--text) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebarCollapseButton"] button::after,
+    html[data-theme="dark"] button[data-testid="stSidebarCollapseButton"]::after {
+        color: var(--text) !important;
+    }
+
+    /* --- Theme Toggle Button --- */
+    .theme-toggle-row {
+        display: flex;
+        justify-content: flex-end;
+        padding: 4px 0 8px;
+    }
+    .theme-toggle-btn {
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 6px 14px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 2px 2px 0px var(--border);
+        transition: all 0.2s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .theme-toggle-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 4px 4px 0px var(--primary);
+    }
+    .theme-toggle-icon {
+        font-size: 16px;
+        transition: transform 0.3s ease;
+    }
+    .theme-toggle-btn:hover .theme-toggle-icon {
+        transform: rotate(20deg) scale(1.1);
+    }
+
+    /* --- Scrollbar Dark Mode --- */
+    html[data-theme="dark"] ::-webkit-scrollbar { width: 8px; }
+    html[data-theme="dark"] ::-webkit-scrollbar-track { background: var(--paper); }
+    html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+    /* --- Dataframe Dark Mode --- */
+    html[data-theme="dark"] [data-testid="stDataFrame"],
+    html[data-theme="dark"] [data-testid="stTable"] {
+        background: var(--surface)!important;
+        color: var(--text)!important;
+    }
     """
     # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)
     # Also add robust fallback stack for networks that block Google Fonts
@@ -792,6 +1093,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = new_session_id()
+if "theme" not in st.session_state:
+    st.session_state.theme = "light"
 
 
 # === SIDEBAR ===
@@ -814,6 +1117,14 @@ def render_sidebar():
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+        # === THEME TOGGLE ===
+        current_theme = st.session_state.get("theme", "light")
+        toggle_icon = "🌙" if current_theme == "light" else "☀️"
+        toggle_label = "Chế độ tối" if current_theme == "light" else "Chế độ sáng"
+        if st.button(f"{toggle_icon} {toggle_label}", key="theme_toggle", use_container_width=True, type="secondary"):
+            st.session_state.theme = "dark" if current_theme == "light" else "light"
+            st.rerun()
 
         if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
             # Lưu phiên hiện tại trước khi tạo mới
@@ -1102,6 +1413,29 @@ def render_chat_page():
 
 # === RENDER ===
 load_custom_css()
+
+# === THEME: Inject JS via components.html (st.markdown strips <script> tags) ===
+_current_theme = st.session_state.get("theme", "light")
+components.html(f"""
+<script>
+    (function() {{
+        var theme = '{_current_theme}';
+        function applyTheme() {{
+            try {{
+                var doc = window.parent.document;
+                doc.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('unisearch-theme', theme);
+            }} catch(e) {{}}
+        }}
+        // Apply immediately
+        applyTheme();
+        // Re-apply after short delay (Streamlit may re-render DOM)
+        setTimeout(applyTheme, 100);
+        setTimeout(applyTheme, 500);
+    }})();
+</script>
+""", height=0, scrolling=False)
+
 api_key_valid, api_key_error = _cached_validate_api_key_v2()
 if not api_key_valid:
     st.warning(api_key_error)
