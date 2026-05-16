@@ -76,11 +76,17 @@ def _process_query(query: str, uploaded_cv=None):
     has_file = uploaded_cv is not None
     chat_history = st.session_state.messages[-4:]
 
-    # === HIỂU ỨNG CHỜ "ĐANG SUY LUẬN" ===
+    # === HIỆU ỨNG CHỜ "ĐANG SUY LUẬN" (SKELETON / TYPING) ===
     thinking_ui = st.empty()
     thinking_ui.markdown("""
-        <div class="ai-thinking">
-            <span class="ai-icon">✨</span> Đang suy luận chuyên sâu<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+        <div class="skeleton-container">
+            <div class="skeleton-avatar">🤖</div>
+            <div class="skeleton-msg">
+                <div class="skeleton-line" style="width: 90%;"></div>
+                <div class="skeleton-line" style="width: 75%;"></div>
+                <div class="skeleton-line" style="width: 50%;"></div>
+            </div>
+            <div class="skeleton-typing">✨ AI đang suy luận chuyên sâu<span>.</span><span>.</span><span>.</span></div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -157,7 +163,7 @@ def load_custom_css():
     }
 
     /* STREAMLIT NATIVE CONTROLS PRESERVED & CUSTOMIZED */
-    .block-container { padding-top:4rem!important; max-width:100vw!important; }
+    .block-container { padding-top:4rem!important; padding-bottom:6rem!important; max-width:100vw!important; }
 
     /* Fix Material Icons Globally (prevents raw text like keyboard_double_arrow_right) */
     span.material-symbols-rounded, 
@@ -744,37 +750,101 @@ def load_custom_css():
     .badge { animation: float 3s ease-in-out infinite; }
     .badge-dot { animation: pulse-ring 2s infinite; }
 
-    /* === AI THINKING === */
-    .ai-thinking {
-        font-family: var(--font-sans);
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--secondary);
-        padding: var(--sp-8) 0;
-        margin-bottom: var(--sp-16);
-        display: inline-flex;
+    /* === RESPONSIVE TABLES === */
+    [data-testid="stMarkdownContainer"] table {
+        display: block !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+    [data-testid="stMarkdownContainer"] th,
+    [data-testid="stMarkdownContainer"] td {
+        padding: 8px 16px;
+        border: 1px solid var(--border);
+    }
+
+    /* === FIX CHAT INPUT TO BOTTOM === */
+    section[data-testid="stBottom"] {
+        position: fixed !important;
+        bottom: 0 !important;
+        z-index: 9999 !important;
+        background: var(--surface) !important;
+        border-top: 2px solid var(--border) !important;
+        padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.05) !important;
+    }
+
+    /* === SMOOTH SIDEBAR MOBILE === */
+    [data-testid="stSidebar"] {
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.05), width 0.4s ease !important;
+        will-change: transform, width;
+    }
+
+    /* === SKELETON LOADING / TYPING EFFECT === */
+    .skeleton-container {
+        display: flex;
+        gap: var(--sp-16);
+        padding: var(--sp-16);
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--sp-32);
+        box-shadow: 3px 3px 0px var(--text);
+        position: relative;
+    }
+    .skeleton-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-sm);
+        background: rgba(0,0,0,0.05);
+        display: flex;
         align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        border: 2px solid var(--border);
+        animation: pulse-bg 1.5s infinite;
+    }
+    .skeleton-msg {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
         gap: var(--sp-8);
+        justify-content: center;
+        margin-top: var(--sp-4);
     }
-    .ai-thinking .ai-icon {
-        font-size: 20px;
-        animation: spin-slow 3s linear infinite;
+    .skeleton-line {
+        height: 10px;
+        background: rgba(0,0,0,0.08);
+        border-radius: var(--radius-sm);
+        animation: pulse-bg 1.5s infinite;
     }
-    .ai-thinking .dots span {
+    .skeleton-typing {
+        position: absolute;
+        bottom: -24px;
+        left: 12px;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        color: var(--secondary);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .skeleton-typing span {
         animation: blink 1.4s infinite both;
-        font-size: 20px;
-        line-height: 1;
+        font-size: 14px;
     }
-    .ai-thinking .dots span:nth-child(2) { animation-delay: 0.2s; }
-    .ai-thinking .dots span:nth-child(3) { animation-delay: 0.4s; }
+    .skeleton-typing span:nth-child(2) { animation-delay: 0.2s; }
+    .skeleton-typing span:nth-child(3) { animation-delay: 0.4s; }
     
     @keyframes blink {
         0% { opacity: 0.2; }
         20% { opacity: 1; }
         100% { opacity: 0.2; }
     }
-    @keyframes spin-slow {
-        100% { transform: rotate(360deg); }
+    @keyframes pulse-bg {
+        0% { opacity: 0.6; }
+        50% { opacity: 0.2; }
+        100% { opacity: 0.6; }
     }
     """
     # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)
