@@ -2,6 +2,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sys
 import io
+import html
+import datetime
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -17,15 +19,36 @@ from agents.counselor import (
 )
 from chat_db import (
     init_db, new_session_id, save_session, list_sessions,
-    load_session, delete_session, toggle_bookmark,
-    cleanup_old_sessions, clear_all_sessions, format_session_date, rename_session
+    load_session_for_user, delete_session, toggle_bookmark,
+    cleanup_old_sessions, format_session_date, rename_session
+)
+from auth_db import init_auth_db
+from auth import (
+    get_google_auth_url,
+    handle_google_callback,
+    login_user,
+    register_user,
+    logout,
 )
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
 # === KHỞI TẠO DB & DỌN DẸP TỰ ĐỘNG ===
 init_db()
+init_auth_db()
 cleanup_old_sessions(days=20)
+
+if "code" in st.query_params:
+    user = handle_google_callback(st.query_params["code"])
+    if user:
+        st.session_state.user = user
+        st.session_state.session_id = new_session_id()
+        st.session_state.messages = []
+        st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+    else:
+        st.session_state.auth_toast = "Không thể đăng nhập bằng Google. Vui lòng thử lại."
+    st.query_params.clear()
+    st.rerun()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -429,6 +452,61 @@ def load_custom_css():
         box-shadow: 4px 4px 0px var(--primary)!important;
         transform: translate(-2px, -2px)!important;
     }
+
+    .login-btn-container {
+        display: none;
+    }
+    div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button,
+    .login-btn-container .stButton > button {
+        position: fixed !important;
+        top: 14px !important;
+        right: 80px !important;
+        z-index: 9998 !important;
+        background: var(--surface) !important;
+        border: 2px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        font-family: var(--font-sans) !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        padding: 8px 20px !important;
+        color: var(--text) !important;
+        box-shadow: 2px 2px 0px var(--border) !important;
+        transition: all 0.2s ease !important;
+        cursor: pointer !important;
+        width: auto !important;
+    }
+    div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button:hover,
+    .login-btn-container .stButton > button:hover {
+        background: var(--primary) !important;
+        color: var(--surface) !important;
+        transform: translate(-2px, -2px) !important;
+        box-shadow: 4px 4px 0px var(--secondary) !important;
+    }
+    div[data-testid="stDialog"] [data-testid="stDialogContent"] {
+        font-family: var(--font-sans) !important;
+    }
+    div[data-testid="stDialog"] .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    div[data-testid="stDialog"] .stTabs [data-baseweb="tab"] {
+        font-family: var(--font-mono) !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+    }
+    div[data-testid="stDialog"] .stLinkButton a {
+        background: var(--surface) !important;
+        border: 2px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--text) !important;
+        font-weight: 700 !important;
+        box-shadow: 2px 2px 0px var(--border) !important;
+        transition: all 0.2s ease !important;
+    }
+    div[data-testid="stDialog"] .stLinkButton a:hover {
+        transform: translate(-2px, -2px) !important;
+        box-shadow: 4px 4px 0px var(--secondary) !important;
+    }
     
     /* Compact buttons in sidebar columns (bookmark, delete) */
     [data-testid="stSidebar"] div[data-testid="column"] div.stButton > button {
@@ -479,6 +557,62 @@ def load_custom_css():
     }
     .sb-user:hover .sb-avatar {
         animation: wiggle 0.5s ease;
+    }
+    .guest-login-card-marker {
+        display: none;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button {
+        background: var(--surface) !important;
+        border: 2px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: 3px 3px 0px var(--secondary) !important;
+        color: var(--text) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: var(--sp-12) !important;
+        min-height: 60px !important;
+        padding: var(--sp-8) !important;
+        margin: 0 0 6px !important;
+        text-align: left !important;
+        opacity: 1 !important;
+        transition: transform 0.2s, box-shadow 0.2s !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button:hover {
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        transform: translate(-2px, -2px) !important;
+        box-shadow: 5px 5px 0px var(--primary) !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button::before {
+        content: "👤";
+        width: 40px;
+        height: 45px;
+        border-radius: var(--radius-sm);
+        background: var(--primary);
+        border: 2px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        color: var(--surface);
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button p {
+        white-space: pre-line !important;
+        text-align: left !important;
+        line-height: 1.35 !important;
+        margin: 0 !important;
+        color: #777 !important;
+        font-family: var(--font-mono) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button p::first-line {
+        color: var(--text) !important;
+        font-family: var(--font-sans) !important;
+        font-size: 16px !important;
+        font-weight: 700 !important;
     }
     .sb-avatar {
         width:40px; height:40px; border-radius:var(--radius-sm);
@@ -957,6 +1091,25 @@ def load_custom_css():
         border-color: var(--border)!important;
         box-shadow: var(--riso-shadow)!important;
     }
+    html[data-theme="dark"] div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button,
+    html[data-theme="dark"] .login-btn-container .stButton > button {
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        border-color: var(--border) !important;
+        box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button:hover,
+    html[data-theme="dark"] .login-btn-container .stButton > button:hover {
+        background: var(--primary) !important;
+        color: #FFFFFF !important;
+        box-shadow: 4px 4px 0px var(--secondary) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogContent"],
+    html[data-theme="dark"] div[data-testid="stDialog"] .stLinkButton a {
+        background: var(--surface) !important;
+        color: var(--text) !important;
+        border-color: var(--border) !important;
+    }
 
     /* --- Hero --- */
     html[data-theme="dark"] .hero .desc {
@@ -1165,6 +1318,54 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = new_session_id()
 if "theme" not in st.session_state:
     st.session_state.theme = "light"
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if st.session_state.get("auth_toast"):
+    st.toast(st.session_state.pop("auth_toast"))
+
+
+@st.dialog("Đăng nhập hoặc đăng ký", width="small")
+def login_dialog():
+    google_auth_url = get_google_auth_url()
+    st.markdown("**Đăng nhập nhanh**")
+    st.link_button("🔵 Tiếp tục bằng Google", google_auth_url, use_container_width=True)
+    st.divider()
+    st.markdown("**Hoặc dùng email**")
+    tab_login, tab_register = st.tabs(["Đăng nhập", "Đăng ký"])
+
+    with tab_login:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Mật khẩu", type="password", key="login_pass")
+        if st.button("Đăng nhập", key="btn_login", type="primary", use_container_width=True):
+            user, error = login_user(email, password)
+            if error:
+                st.error(error)
+            else:
+                st.session_state.user = user
+                st.session_state.session_id = new_session_id()
+                st.session_state.messages = []
+                st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+                st.rerun()
+
+    with tab_register:
+        reg_name = st.text_input("Họ và tên", key="reg_name")
+        reg_email = st.text_input("Email", key="reg_email")
+        reg_pass = st.text_input("Mật khẩu", type="password", key="reg_pass")
+        reg_pass2 = st.text_input("Xác nhận mật khẩu", type="password", key="reg_pass2")
+        if st.button("Đăng ký", key="btn_register", type="primary", use_container_width=True):
+            if reg_pass != reg_pass2:
+                st.error("Mật khẩu xác nhận không khớp.")
+            else:
+                user, error = register_user(reg_email, reg_name, reg_pass)
+                if error:
+                    st.error(error)
+                else:
+                    st.session_state.user = user
+                    st.session_state.session_id = new_session_id()
+                    st.session_state.messages = []
+                    st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+                    st.rerun()
 
 
 # === SIDEBAR ===
@@ -1178,15 +1379,33 @@ def render_sidebar():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("""
-        <div class="sb-user">
-            <div class="sb-avatar">👦</div>
-            <div>
-                <div class="sb-uname">Học sinh lớp 12</div>
-                <div class="sb-urole">PHIÊN TRA CỨU</div>
+        user = st.session_state.get("user")
+        if user:
+            raw_display_name = user.get("display_name") or "Người dùng"
+            display_name = html.escape(raw_display_name)
+            email = html.escape(user.get("email") or "")
+            avatar_letter = html.escape(raw_display_name[0].upper()) if raw_display_name else "U"
+            st.markdown(f"""
+            <div class="sb-user">
+                <div class="sb-avatar">{avatar_letter}</div>
+                <div>
+                    <div class="sb-uname">{display_name}</div>
+                    <div class="sb-urole">{email}</div>
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="guest-login-card-marker"></span>', unsafe_allow_html=True)
+            if st.button("Khách\nĐĂNG NHẬP ĐỂ LƯU LỊCH SỬ", key="guest_login_card", use_container_width=True, type="secondary"):
+                login_dialog()
+
+        if user:
+            if st.button("🚪 Đăng xuất", key="logout_btn", use_container_width=True, type="secondary"):
+                logout()
+                st.session_state.session_id = new_session_id()
+                st.session_state.messages = []
+                st.session_state.auth_toast = "👋 Đã đăng xuất."
+                st.rerun()
 
         # === THEME TOGGLE ===
         current_theme = st.session_state.get("theme", "light")
@@ -1198,8 +1417,8 @@ def render_sidebar():
 
         if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
             # Lưu phiên hiện tại trước khi tạo mới
-            if st.session_state.messages:
-                save_session(st.session_state.session_id, st.session_state.messages)
+            if user and st.session_state.messages:
+                save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
             st.session_state.session_id = new_session_id()
             st.session_state.messages = []
             st.session_state.page = "chat"
@@ -1210,103 +1429,107 @@ def render_sidebar():
             st.rerun()
 
         # ─── LỊCH SỬ GẦN ĐÂY (từ SQLite) ───
-        st.markdown('<div class="sb-section">Lịch sử gần đây</div>', unsafe_allow_html=True)
+        if user:
+            st.markdown('<div class="sb-section">Lịch sử gần đây</div>', unsafe_allow_html=True)
 
-        recent_sessions = list_sessions(limit=15)
-        if not recent_sessions:
-            st.caption("Chưa có lịch sử chat.")
-        else:
-            for sess in recent_sessions:
-                sid = sess["id"]
-                is_current = (sid == st.session_state.get("session_id"))
-                
-                with st.container():
-                    st.markdown(f'<div class="hist-row-marker {"active" if is_current else ""}"></div>', unsafe_allow_html=True)
-                    
-                    # Tính toán thời gian trước khi render
-                    import datetime
-                    time_str = ""
-                    try:
-                        dt_str = str(sess["updated_at"]).replace("Z", "")
-                        dt = datetime.datetime.fromisoformat(dt_str)
-                        now = datetime.datetime.now()
-                        if dt.date() == now.date():
-                            time_str = f"Hôm nay, {dt.strftime('%H:%M')}"
-                        elif dt.date() == (now - datetime.timedelta(days=1)).date():
-                            time_str = f"Hôm qua, {dt.strftime('%H:%M')}"
-                        else:
-                            time_str = dt.strftime("%d/%m/%Y, %H:%M")
-                    except Exception:
+            recent_sessions = list_sessions(limit=15, user_id=user["id"])
+            if not recent_sessions:
+                st.caption("Chưa có lịch sử chat.")
+            else:
+                for sess in recent_sessions:
+                    sid = sess["id"]
+                    is_current = (sid == st.session_state.get("session_id"))
+
+                    with st.container():
+                        st.markdown(f'<div class="hist-row-marker {"active" if is_current else ""}"></div>', unsafe_allow_html=True)
+
+                        # Tính toán thời gian trước khi render
                         time_str = ""
+                        try:
+                            dt_str = str(sess["updated_at"]).replace("Z", "")
+                            dt = datetime.datetime.fromisoformat(dt_str)
+                            now = datetime.datetime.now()
+                            if dt.date() == now.date():
+                                time_str = f"Hôm nay, {dt.strftime('%H:%M')}"
+                            elif dt.date() == (now - datetime.timedelta(days=1)).date():
+                                time_str = f"Hôm qua, {dt.strftime('%H:%M')}"
+                            else:
+                                time_str = dt.strftime("%d/%m/%Y, %H:%M")
+                        except Exception:
+                            time_str = ""
 
-                    if st.session_state.get("rename_sid") == sid:
-                        new_name = st.text_input("Đổi tên", value=sess['title'], key=f"rn_in_{sid}", label_visibility="collapsed")
-                        c1, c2 = st.columns(2)
-                        if c1.button("Lưu", key=f"sv_{sid}", use_container_width=True):
-                            if new_name.strip():
-                                rename_session(sid, new_name.strip())
-                            st.session_state.rename_sid = None
-                            st.rerun()
-                        if c2.button("Hủy", key=f"cc_{sid}", use_container_width=True):
-                            st.session_state.rename_sid = None
-                            st.rerun()
-                    else:
-                        col1, col2 = st.columns([8, 1.5], vertical_alignment="center")
-                        with col1:
-                            pin_icon = "📌 " if sess["bookmarked"] else ""
-                            # Giới hạn độ dài tiêu đề
-                            display_title = sess['title']
-                            if len(display_title) > 25: display_title = display_title[:22] + "..."
-                            
-                            btn_label = f"{pin_icon}{display_title}"
-                            
-                            if st.button(btn_label, key=f"load_{sid}", use_container_width=True):
-                                if st.session_state.messages:
-                                    save_session(st.session_state.session_id, st.session_state.messages)
-                                st.session_state.session_id = sid
-                                st.session_state.messages = load_session(sid)
-                                st.session_state.page = "chat"
+                        if st.session_state.get("rename_sid") == sid:
+                            new_name = st.text_input("Đổi tên", value=sess['title'], key=f"rn_in_{sid}", label_visibility="collapsed")
+                            c1, c2 = st.columns(2)
+                            if c1.button("Lưu", key=f"sv_{sid}", use_container_width=True):
+                                if new_name.strip():
+                                    rename_session(sid, new_name.strip(), user_id=user["id"])
+                                st.session_state.rename_sid = None
                                 st.rerun()
-                        with col2:
-                            with st.popover("⋮", use_container_width=True):
-                                pin_label = "Bỏ ghim" if sess["bookmarked"] else "Ghim"
-                                if st.button(f"📌 {pin_label}", key=f"bm_{sid}", use_container_width=True):
-                                    toggle_bookmark(sid)
-                                    st.rerun()
-                                if st.button("✏️ Đổi tên", key=f"rn_btn_{sid}", use_container_width=True):
-                                    st.session_state.rename_sid = sid
-                                    st.rerun()
-                                if st.session_state.get("confirm_delete_sid") == sid:
-                                    st.warning("Bạn có chắc muốn xóa?")
-                                    cd1, cd2 = st.columns(2)
-                                    if cd1.button("⚠️ Xác nhận", key=f"cf_del_{sid}", use_container_width=True):
-                                        delete_session(sid)
-                                        st.session_state.pop("confirm_delete_sid", None)
-                                        if sid == st.session_state.get("session_id"):
-                                            st.session_state.session_id = new_session_id()
-                                            st.session_state.messages = []
-                                        st.rerun()
-                                    if cd2.button("↩️ Hủy", key=f"cc_del_{sid}", use_container_width=True):
-                                        st.session_state.pop("confirm_delete_sid", None)
-                                        st.rerun()
-                                else:
-                                    if st.button("🗑️ Xóa", key=f"del_{sid}", use_container_width=True):
-                                        st.session_state.confirm_delete_sid = sid
-                                        st.rerun()
+                            if c2.button("Hủy", key=f"cc_{sid}", use_container_width=True):
+                                st.session_state.rename_sid = None
+                                st.rerun()
+                        else:
+                            col1, col2 = st.columns([8, 1.5], vertical_alignment="center")
+                            with col1:
+                                pin_icon = "📌 " if sess["bookmarked"] else ""
+                                # Giới hạn độ dài tiêu đề
+                                display_title = sess['title']
+                                if len(display_title) > 25: display_title = display_title[:22] + "..."
 
-                    # Hiển thị thời gian NGOÀI khung border của history item
-                    if time_str:
-                        st.markdown(f'<div class="hist-time">{time_str}</div>', unsafe_allow_html=True)
+                                btn_label = f"{pin_icon}{display_title}"
+
+                                if st.button(btn_label, key=f"load_{sid}", use_container_width=True):
+                                    if user and st.session_state.messages:
+                                        save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
+                                    st.session_state.session_id = sid
+                                    st.session_state.messages = load_session_for_user(sid, user["id"])
+                                    st.session_state.page = "chat"
+                                    st.rerun()
+                            with col2:
+                                with st.popover("⋮", use_container_width=True):
+                                    pin_label = "Bỏ ghim" if sess["bookmarked"] else "Ghim"
+                                    if st.button(f"📌 {pin_label}", key=f"bm_{sid}", use_container_width=True):
+                                        toggle_bookmark(sid, user_id=user["id"])
+                                        st.rerun()
+                                    if st.button("✏️ Đổi tên", key=f"rn_btn_{sid}", use_container_width=True):
+                                        st.session_state.rename_sid = sid
+                                        st.rerun()
+                                    if st.session_state.get("confirm_delete_sid") == sid:
+                                        st.warning("Bạn có chắc muốn xóa?")
+                                        cd1, cd2 = st.columns(2)
+                                        if cd1.button("⚠️ Xác nhận", key=f"cf_del_{sid}", use_container_width=True):
+                                            delete_session(sid, user_id=user["id"])
+                                            st.session_state.pop("confirm_delete_sid", None)
+                                            if sid == st.session_state.get("session_id"):
+                                                st.session_state.session_id = new_session_id()
+                                                st.session_state.messages = []
+                                            st.rerun()
+                                        if cd2.button("↩️ Hủy", key=f"cc_del_{sid}", use_container_width=True):
+                                            st.session_state.pop("confirm_delete_sid", None)
+                                            st.rerun()
+                                    else:
+                                        if st.button("🗑️ Xóa", key=f"del_{sid}", use_container_width=True):
+                                            st.session_state.confirm_delete_sid = sid
+                                            st.rerun()
+
+                        # Hiển thị thời gian NGOÀI khung border của history item
+                        if time_str:
+                            st.markdown(f'<div class="hist-time">{time_str}</div>', unsafe_allow_html=True)
+        else:
+            st.caption("💡 Đăng nhập để lưu và xem lại lịch sử chat.")
 
         # ─── HỆ THỐNG ───
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
         st.caption("💡 Phiên chưa ghim sẽ tự động xóa sau 20 ngày")
-        if st.button("🧹 Xoá toàn bộ lịch sử", use_container_width=True, type="secondary"):
-            clear_all_sessions()
-            st.session_state.session_id = new_session_id()
-            st.session_state.messages = []
-            st.toast("✅ Đã xoá toàn bộ lịch sử chat.")
-            st.rerun()
+        if user:
+            if st.button("🧹 Xoá lịch sử của tôi", use_container_width=True, type="secondary"):
+                for sess in list_sessions(limit=1000, user_id=user["id"]):
+                    delete_session(sess["id"], user_id=user["id"])
+                st.session_state.session_id = new_session_id()
+                st.session_state.messages = []
+                st.toast("✅ Đã xoá lịch sử chat của bạn.")
+                st.rerun()
 
 
 # === HOME PAGE ===
@@ -1464,8 +1687,9 @@ def render_chat_page():
         if response:
             st.session_state.messages.append({"role": "assistant", "content": str(response)})
         # === AUTO-SAVE ===
-        if st.session_state.messages:
-            save_session(st.session_state.session_id, st.session_state.messages)
+        user = st.session_state.get("user")
+        if user and st.session_state.messages:
+            save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
 
     # Xử lý câu hỏi nhập từ ô chat
     if prompt := st.chat_input("Nhập câu hỏi... (VD: Điểm chuẩn Bách Khoa 2024?)"):
@@ -1477,12 +1701,18 @@ def render_chat_page():
         if response:
             st.session_state.messages.append({"role": "assistant", "content": str(response)})
         # === AUTO-SAVE ===
-        if st.session_state.messages:
-            save_session(st.session_state.session_id, st.session_state.messages)
+        user = st.session_state.get("user")
+        if user and st.session_state.messages:
+            save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
 
 
 # === RENDER ===
 load_custom_css()
+
+if not st.session_state.get("user"):
+    st.markdown('<div class="login-btn-container"></div>', unsafe_allow_html=True)
+    if st.button("Đăng nhập", key="top_login_btn"):
+        login_dialog()
 
 # === THEME: Inject JS via components.html (st.markdown strips <script> tags) ===
 _current_theme = st.session_state.get("theme", "light")

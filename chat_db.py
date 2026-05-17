@@ -46,6 +46,10 @@ def init_db():
         conn.execute("ALTER TABLE chat_sessions ADD COLUMN bookmarked INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # Cột đã tồn tại → bỏ qua
+    try:
+        conn.execute("ALTER TABLE chat_sessions ADD COLUMN user_id TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -71,7 +75,7 @@ def _generate_title(messages: list) -> str:
     return "Phiên mới"
 
 
-def save_session(session_id: str, messages: list, title: str | None = None):
+def save_session(session_id: str, messages: list, title: str | None = None, user_id: str | None = None):
     """Lưu hoặc cập nhật phiên chat vào DB."""
     if not messages:
         return
@@ -83,26 +87,31 @@ def save_session(session_id: str, messages: list, title: str | None = None):
     conn = _get_conn()
     # UPSERT: nếu session đã tồn tại → cập nhật, nếu chưa → tạo mới
     conn.execute("""
-        INSERT INTO chat_sessions (id, title, messages, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO chat_sessions (id, title, messages, user_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title      = excluded.title,
             messages   = excluded.messages,
+            user_id    = excluded.user_id,
             updated_at = excluded.updated_at
-    """, (session_id, auto_title, messages_json, now, now))
+    """, (session_id, auto_title, messages_json, user_id, now, now))
     conn.commit()
     conn.close()
 
 
-def list_sessions(limit: int = 20) -> list[dict]:
+def list_sessions(limit: int = 20, user_id: str | None = None) -> list[dict]:
     """Liệt kê các phiên gần đây, sắp xếp theo updated_at giảm dần."""
+    if user_id is None:
+        return []
+
     conn = _get_conn()
     rows = conn.execute("""
         SELECT id, title, bookmarked, created_at, updated_at
         FROM chat_sessions
+        WHERE user_id = ?
         ORDER BY updated_at DESC
         LIMIT ?
-    """, (limit,)).fetchall()
+    """, (user_id, limit)).fetchall()
     conn.close()
 
     result = []
@@ -130,41 +139,76 @@ def load_session(session_id: str) -> list:
     return []
 
 
-def delete_session(session_id: str):
-    """Xoá một phiên chat."""
-    conn = _get_conn()
-    conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
-    conn.commit()
-    conn.close()
-
-
-def rename_session(session_id: str, new_title: str):
-    """Đổi tên một phiên chat."""
-    conn = _get_conn()
-    conn.execute(
-        "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?",
-        (new_title, datetime.now().isoformat(), session_id)
-    )
-    conn.commit()
-    conn.close()
-
-
-def toggle_bookmark(session_id: str) -> bool:
-    """Đảo trạng thái bookmark. Trả về trạng thái mới."""
+def load_session_for_user(session_id: str, user_id: str) -> list:
     conn = _get_conn()
     row = conn.execute(
-        "SELECT bookmarked FROM chat_sessions WHERE id = ?", (session_id,)
+        "SELECT messages FROM chat_sessions WHERE id = ? AND user_id = ?",
+        (session_id, user_id),
     ).fetchone()
+    conn.close()
+
+    if row:
+        return json.loads(row["messages"])
+    return []
+
+
+def delete_session(session_id: str, user_id: str | None = None) -> bool:
+    """Xoá một phiên chat."""
+    conn = _get_conn()
+    if user_id is None:
+        cursor = conn.execute("DELETE FROM chat_sessions WHERE id = ? AND user_id IS NULL", (session_id,))
+    else:
+        cursor = conn.execute("DELETE FROM chat_sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def rename_session(session_id: str, new_title: str, user_id: str | None = None) -> bool:
+    """Đổi tên một phiên chat."""
+    conn = _get_conn()
+    if user_id is None:
+        cursor = conn.execute(
+            "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id IS NULL",
+            (new_title, datetime.now().isoformat(), session_id)
+        )
+    else:
+        cursor = conn.execute(
+            "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            (new_title, datetime.now().isoformat(), session_id, user_id)
+        )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def toggle_bookmark(session_id: str, user_id: str | None = None) -> bool:
+    """Đảo trạng thái bookmark. Trả về trạng thái mới."""
+    conn = _get_conn()
+    if user_id is None:
+        row = conn.execute(
+            "SELECT bookmarked FROM chat_sessions WHERE id = ? AND user_id IS NULL", (session_id,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT bookmarked FROM chat_sessions WHERE id = ? AND user_id = ?", (session_id, user_id)
+        ).fetchone()
 
     if row is None:
         conn.close()
         return False
 
     new_val = 0 if row["bookmarked"] else 1
-    conn.execute(
-        "UPDATE chat_sessions SET bookmarked = ? WHERE id = ?",
-        (new_val, session_id),
-    )
+    if user_id is None:
+        conn.execute(
+            "UPDATE chat_sessions SET bookmarked = ? WHERE id = ? AND user_id IS NULL",
+            (new_val, session_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE chat_sessions SET bookmarked = ? WHERE id = ? AND user_id = ?",
+            (new_val, session_id, user_id),
+        )
     conn.commit()
     conn.close()
     return bool(new_val)

@@ -10,3 +10,5 @@ numpy
 easyocr==1.7.2
 opencv-python-headless==4.13.0.92
 pytest==9.0.3
+bcrypt==4.3.0
+requests>=2.31.0
