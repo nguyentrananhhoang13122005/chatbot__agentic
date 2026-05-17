@@ -29,7 +29,7 @@ def _sanitize_user(user: dict | None) -> dict | None:
     }
 
 
-def get_google_auth_url() -> str:
+def get_google_auth_url(state: str | None = None) -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501")
     params = {
@@ -40,6 +40,8 @@ def get_google_auth_url() -> str:
         "access_type": "offline",
         "prompt": "select_account",
     }
+    if state:
+        params["state"] = state
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
@@ -70,6 +72,7 @@ def get_google_user_info(access_token: str) -> dict:
     payload = response.json()
     return {
         "email": payload.get("email", ""),
+        "email_verified": payload.get("email_verified", False),
         "name": payload.get("name", ""),
         "picture": payload.get("picture", ""),
     }
@@ -101,8 +104,8 @@ def register_user(email: str, display_name: str, password: str) -> tuple[dict | 
         return None, "Email không hợp lệ."
     if not cleaned_name:
         return None, "Vui lòng nhập họ và tên."
-    if len(password or "") < 6:
-        return None, "Mật khẩu phải có ít nhất 6 ký tự."
+    if len(password or "") < 8:
+        return None, "Mật khẩu phải có ít nhất 8 ký tự."
     if get_user_by_email(normalized_email):
         return None, "Email này đã được đăng ký."
 
@@ -122,11 +125,11 @@ def login_user(email: str, password: str) -> tuple[dict | None, str | None]:
     user = get_user_by_email(normalized_email)
 
     if user is None:
-        return None, "Email không tồn tại."
+        return None, "Email hoặc mật khẩu không đúng."
     if user.get("auth_provider") == "google" and not user.get("password_hash"):
         return None, "Tài khoản này dùng Google. Vui lòng đăng nhập bằng Google."
     if not verify_password(password or "", user.get("password_hash", "")):
-        return None, "Mật khẩu không đúng."
+        return None, "Email hoặc mật khẩu không đúng."
 
     update_last_login(user["id"])
     refreshed = get_user_by_email(normalized_email)
@@ -142,6 +145,8 @@ def handle_google_callback(code: str) -> dict | None:
         if not access_token:
             return None
         info = get_google_user_info(access_token)
+        if not info.get("email_verified", False):
+            return None
         email = normalize_email(info.get("email", ""))
         if not email:
             return None

@@ -92,8 +92,9 @@ def save_session(session_id: str, messages: list, title: str | None = None, user
         ON CONFLICT(id) DO UPDATE SET
             title      = excluded.title,
             messages   = excluded.messages,
-            user_id    = excluded.user_id,
             updated_at = excluded.updated_at
+        WHERE chat_sessions.user_id = excluded.user_id
+              OR (chat_sessions.user_id IS NULL AND excluded.user_id IS NULL)
     """, (session_id, auto_title, messages_json, user_id, now, now))
     conn.commit()
     conn.close()
@@ -127,7 +128,8 @@ def list_sessions(limit: int = 20, user_id: str | None = None) -> list[dict]:
 
 
 def load_session(session_id: str) -> list:
-    """Tải messages của một phiên. Trả về [] nếu không tìm thấy."""
+    """Tải messages của một phiên. Trả về [] nếu không tìm thấy.
+    WARNING: Không kiểm tra user ownership. Dùng load_session_for_user() cho user-scoped access."""
     conn = _get_conn()
     row = conn.execute(
         "SELECT messages FROM chat_sessions WHERE id = ?", (session_id,)
@@ -215,8 +217,9 @@ def toggle_bookmark(session_id: str, user_id: str | None = None) -> bool:
 
 
 def cleanup_old_sessions(days: int = 20) -> int:
-    """Xoá các phiên KHÔNG được bookmark và cũ hơn `days` ngày.
-    Trả về số phiên đã xoá."""
+    """Xoá các phiên KHÔNG được bookmark và cũ hơn `days` ngày cho TẤT CẢ users.
+    Trả về số phiên đã xoá.
+    Note: Đây là hàm cleanup hệ thống, chạy cross-user."""
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
     conn = _get_conn()
     cursor = conn.execute(
@@ -232,7 +235,8 @@ def cleanup_old_sessions(days: int = 20) -> int:
 
 
 def clear_all_sessions():
-    """Xoá TOÀN BỘ lịch sử chat (kể cả bookmark)."""
+    """Xoá TOÀN BỘ lịch sử chat (kể cả bookmark) cho TẤT CẢ users.
+    WARNING: Hàm hệ thống, bypass user ownership."""
     conn = _get_conn()
     conn.execute("DELETE FROM chat_sessions")
     conn.commit()

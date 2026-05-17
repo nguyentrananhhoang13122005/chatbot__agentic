@@ -87,7 +87,7 @@ class TestAuth:
         user, error = auth.login_user("login@example.com", "wrong123")
 
         assert user is None
-        assert error == "Mật khẩu không đúng."
+        assert error == "Email hoặc mật khẩu không đúng."
 
     def test_login_user_returns_user_for_correct_password(self, auth_modules):
         _, auth, _ = auth_modules
@@ -162,3 +162,96 @@ class TestChatDbUserScoping:
         assert chat_db.list_sessions(user_id="owner")[0]["bookmarked"] is False
         assert chat_db.toggle_bookmark("bookmark-session", user_id="owner") is True
         assert chat_db.list_sessions(user_id="owner")[0]["bookmarked"] is True
+
+
+class TestOAuthState:
+    def test_get_google_auth_url_includes_state_param(self, auth_modules):
+        _, auth, _ = auth_modules
+        url = auth.get_google_auth_url(state="abc123")
+        assert "state=abc123" in url
+
+    def test_get_google_auth_url_without_state_has_no_state_param(self, auth_modules):
+        _, auth, _ = auth_modules
+        url = auth.get_google_auth_url()
+        assert "state=" not in url
+
+
+class TestGoogleEmailVerified:
+    def test_handle_google_callback_rejects_unverified_email(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+
+        monkeypatch.setattr(auth, "exchange_code_for_token", lambda _code: "fake-token")
+        monkeypatch.setattr(auth, "get_google_user_info", lambda _token: {
+            "email": "unverified@example.com",
+            "email_verified": False,
+            "name": "Unverified",
+            "picture": "",
+        })
+
+        assert auth.handle_google_callback("good-code") is None
+
+    def test_handle_google_callback_accepts_verified_email(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+
+        monkeypatch.setattr(auth, "exchange_code_for_token", lambda _code: "fake-token")
+        monkeypatch.setattr(auth, "get_google_user_info", lambda _token: {
+            "email": "verified@example.com",
+            "email_verified": True,
+            "name": "Verified User",
+            "picture": "https://example.com/pic.png",
+        })
+
+        user = auth.handle_google_callback("good-code")
+        assert user is not None
+        assert user["email"] == "verified@example.com"
+
+
+class TestLoginErrorMessages:
+    def test_login_wrong_email_returns_generic_error(self, auth_modules):
+        _, auth, _ = auth_modules
+        _, error = auth.login_user("nonexistent@example.com", "any-password")
+        assert error == "Email hoặc mật khẩu không đúng."
+
+    def test_login_wrong_password_returns_generic_error(self, auth_modules):
+        _, auth, _ = auth_modules
+        auth.register_user("generic@example.com", "User", "correct1234")
+        _, error = auth.login_user("generic@example.com", "wrong123")
+        assert error == "Email hoặc mật khẩu không đúng."
+
+    def test_login_google_account_still_returns_specific_error(self, auth_modules):
+        auth_db, auth, _ = auth_modules
+        auth_db.create_user(
+            email="guser@example.com",
+            display_name="Google User",
+            auth_provider="google",
+            password_hash="",
+        )
+        _, error = auth.login_user("guser@example.com", "any")
+        assert "Google" in error
+
+
+class TestPasswordMinLength:
+    def test_register_rejects_7_char_password(self, auth_modules):
+        _, auth, _ = auth_modules
+        _, error = auth.register_user("short@example.com", "User", "1234567")
+        assert error is not None
+        assert "8" in error
+
+    def test_register_accepts_8_char_password(self, auth_modules):
+        _, auth, _ = auth_modules
+        user, error = auth.register_user("ok8@example.com", "User", "12345678")
+        assert error is None
+        assert user is not None
+
+
+class TestSaveSessionOwnerSafety:
+    def test_save_session_cannot_steal_ownership(self, auth_modules):
+        _, _, chat_db = auth_modules
+        chat_db.save_session("steal-test", [{"role": "user", "content": "mine"}], user_id="owner-a")
+
+        chat_db.save_session("steal-test", [{"role": "user", "content": "stolen"}], user_id="attacker")
+
+        msgs = chat_db.load_session_for_user("steal-test", "owner-a")
+        assert len(msgs) > 0
+        assert msgs[0]["content"] == "mine"
+        assert chat_db.load_session_for_user("steal-test", "attacker") == []

@@ -55,6 +55,18 @@ def test_app_defines_login_dialog_and_auth_session_state():
     assert "handle_google_callback" in source
 
 
+def test_google_oauth_uses_state_parameter():
+    source = _source()
+
+    assert "secrets.token_urlsafe(32)" in source
+    assert "st.session_state.oauth_state = state" in source
+    assert "_store_oauth_state(state)" in source
+    assert "get_google_auth_url(state=state)" in source
+    assert 'received_state = st.query_params.get("state", "")' in source
+    assert "_consume_oauth_state(received_state)" in source
+    assert 'st.session_state.pop("oauth_state", "")' in source
+
+
 def test_guest_card_is_clickable_login_trigger():
     source = _source()
 
@@ -87,3 +99,13 @@ def test_app_resets_anonymous_chat_after_successful_login():
         nearby = "\n".join(lines[index:index + 6])
         assert "st.session_state.session_id = new_session_id()" in nearby
         assert "st.session_state.messages = []" in nearby
+
+
+def test_user_card_js_strings_escape_script_closing_tags():
+    source = _source()
+
+    assert "def _safe_js_string(value: str) -> str:" in source
+    assert 'json.dumps(value).replace("</", "<\\\\/")' in source
+    assert "display_name_js = _safe_js_string(raw_display_name)" in source
+    assert "email_js = _safe_js_string(raw_email)" in source
+    assert "avatar_letter_js = _safe_js_string(avatar_letter)" in source

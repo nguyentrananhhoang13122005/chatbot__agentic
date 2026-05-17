@@ -2,8 +2,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sys
 import io
-import html
+import time
 import datetime
+import secrets
+import json
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -40,15 +42,52 @@ init_db()
 init_auth_db()
 cleanup_old_sessions(days=20)
 
+# ── Module-level OAuth state store ──────────────────────────────
+# st.session_state is tied to the WebSocket; when the browser
+# navigates away (Google OAuth redirect) the socket disconnects
+# and the session may be lost.  A module-level dict survives
+# across Streamlit sessions inside the same server process.
+_OAUTH_TTL = 600                        # 10 minutes
+
+@st.cache_resource
+def _get_oauth_store() -> dict:
+    """Shared dict that survives Streamlit reruns."""
+    return {}
+
+def _store_oauth_state(state: str):
+    store = _get_oauth_store()
+    store[state] = time.time()
+    cutoff = time.time() - _OAUTH_TTL
+    for k in [k for k, v in store.items() if v < cutoff]:
+        store.pop(k, None)
+
+def _consume_oauth_state(state: str) -> bool:
+    store = _get_oauth_store()
+    if state and state in store:
+        ts = store.pop(state)
+        return (time.time() - ts) < _OAUTH_TTL
+    return False
+
 if "code" in st.query_params:
-    user = handle_google_callback(st.query_params["code"])
-    if user:
-        st.session_state.user = user
-        st.session_state.session_id = new_session_id()
-        st.session_state.messages = []
-        st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+    received_state = st.query_params.get("state", "")
+    # Module-level store survives session reset; fall back to session_state
+    state_ok = _consume_oauth_state(received_state)
+    if not state_ok:
+        expected_state = st.session_state.pop("oauth_state", "")
+        state_ok = bool(received_state and received_state == expected_state)
     else:
-        st.session_state.auth_toast = "Không thể đăng nhập bằng Google. Vui lòng thử lại."
+        st.session_state.pop("oauth_state", None)
+    if not state_ok:
+        st.session_state.auth_toast = "⚠️ Phiên đăng nhập không hợp lệ. Vui lòng thử lại."
+    else:
+        user = handle_google_callback(st.query_params["code"])
+        if user:
+            st.session_state.user = user
+            st.session_state.session_id = new_session_id()
+            st.session_state.messages = []
+            st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+        else:
+            st.session_state.auth_toast = "Không thể đăng nhập bằng Google. Vui lòng thử lại."
     st.query_params.clear()
     st.rerun()
 
@@ -56,6 +95,10 @@ if "code" in st.query_params:
 @st.cache_data(ttl=600, show_spinner=False)
 def _cached_validate_api_key_v2():
     return validate_api_key()
+
+
+def _safe_js_string(value: str) -> str:
+    return json.dumps(value).replace("</", "<\\/")
 
 
 def _dataframe_to_history_text(dataframe) -> str:
@@ -313,8 +356,6 @@ def load_custom_css():
     }
 
     /* === BOTTOM USER PROFILE CARD === */
-    .sb-user-card-trigger { display: none; }
-
     /* Container border-top separator (class added via JS) */
     .sb-user-card-container {
         border-top: 2px solid var(--border) !important;
@@ -681,22 +722,6 @@ def load_custom_css():
         background: var(--primary); display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
         border: 1px solid var(--border);
     }
-    .sb-user {
-        background:var(--surface); border-radius:var(--radius-md);
-        padding:var(--sp-8); margin:0 0 var(--sp-12);
-        border: 2px solid var(--border);
-        box-shadow: 3px 3px 0px var(--secondary);
-        display:flex; align-items:center; gap:var(--sp-12);
-        transition: transform 0.2s, box-shadow 0.2s;
-        cursor: pointer;
-    }
-    .sb-user:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 5px 5px 0px var(--primary);
-    }
-    .sb-user:hover .sb-avatar {
-        animation: wiggle 0.5s ease;
-    }
     .guest-login-card-marker {
         display: none;
     }
@@ -753,14 +778,6 @@ def load_custom_css():
         font-size: 16px !important;
         font-weight: 700 !important;
     }
-    .sb-avatar {
-        width:40px; height:40px; border-radius:var(--radius-sm);
-        background: var(--primary); border: 2px solid var(--border);
-        display:flex; align-items:center; justify-content:center;
-        font-size:20px; flex-shrink:0; color: var(--surface);
-    }
-    .sb-uname { font-weight:700; font-size:16px; color:var(--text); }
-    .sb-urole { font-family: var(--font-mono); font-size:12px; color:var(--secondary); margin-top:2px; font-weight:600;}
     .sb-section {
         font-family: var(--font-mono);
         font-size:14px; font-weight:700; color:var(--text);
@@ -1237,15 +1254,6 @@ def load_custom_css():
     html[data-theme="dark"] .sb-tag {
         color: var(--surface);
     }
-    html[data-theme="dark"] .sb-user {
-        background: var(--surface);
-        border-color: var(--border);
-        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5);
-    }
-    html[data-theme="dark"] .sb-user:hover {
-        box-shadow: 5px 5px 0px var(--primary);
-    }
-    html[data-theme="dark"] .sb-uname { color: var(--text); }
     html[data-theme="dark"] .sb-section {
         color: var(--text);
         border-bottom-color: var(--border);
@@ -1573,7 +1581,10 @@ if st.session_state.get("auth_toast"):
 
 @st.dialog("Đăng nhập hoặc đăng ký", width="small")
 def login_dialog():
-    google_auth_url = get_google_auth_url()
+    state = secrets.token_urlsafe(32)
+    st.session_state.oauth_state = state
+    _store_oauth_state(state)
+    google_auth_url = get_google_auth_url(state=state)
     st.markdown("**Đăng nhập nhanh**")
     st.link_button("🔵 Tiếp tục bằng Google", google_auth_url, use_container_width=True)
     st.divider()
@@ -1592,7 +1603,7 @@ def login_dialog():
                 st.session_state.session_id = new_session_id()
                 st.session_state.messages = []
                 st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
-                st.rerun()
+                st.rerun(scope="app")
 
     with tab_register:
         reg_name = st.text_input("Họ và tên", key="reg_name")
@@ -1611,7 +1622,7 @@ def login_dialog():
                     st.session_state.session_id = new_session_id()
                     st.session_state.messages = []
                     st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
-                    st.rerun()
+                    st.rerun(scope="app")
 
 
 # === SIDEBAR ===
@@ -1758,15 +1769,16 @@ def render_sidebar():
         # ─── BOTTOM USER PROFILE (sticky) ───
         if user:
             raw_display_name = user.get("display_name") or "Người dùng"
-            display_name = html.escape(raw_display_name)
-            email_display = html.escape(user.get("email") or "")
-            avatar_letter = html.escape(raw_display_name[0].upper()) if raw_display_name else "U"
+            raw_email = user.get("email") or ""
+            avatar_letter = raw_display_name[0].upper() if raw_display_name else "U"
+            display_name_js = _safe_js_string(raw_display_name)
+            email_js = _safe_js_string(raw_email)
+            avatar_letter_js = _safe_js_string(avatar_letter)
 
             st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="sb-user-card-trigger"></div>', unsafe_allow_html=True)
-            with st.popover(f"{raw_display_name}\n{email_display}", use_container_width=True):
+            with st.popover(f"{raw_display_name}\n{raw_email}", use_container_width=True):
                 if st.button("⚙️ Cài đặt", key="settings_btn", use_container_width=True):
-                    pass  # TODO: Future settings page
+                    st.toast("🚧 Tính năng đang phát triển.")
                 if st.button("🚪 Đăng xuất", key="logout_popup_btn", use_container_width=True):
                     logout()
                     st.session_state.session_id = new_session_id()
@@ -1791,7 +1803,7 @@ def render_sidebar():
                     var targetBtn = null;
                     for (var i = 0; i < allPopovers.length; i++) {{
                         var b = allPopovers[i].querySelector('button');
-                        if (b && b.textContent && b.textContent.indexOf('{display_name}') !== -1) {{
+                        if (b && b.textContent && b.textContent.indexOf({display_name_js}) !== -1) {{
                             targetPopover = allPopovers[i];
                             targetBtn = b;
                             break;
@@ -1807,8 +1819,8 @@ def render_sidebar():
                     if (wrapper) wrapper.classList.add('sb-user-card-container');
 
                     // Set data attributes for CSS ::before and ::after content
-                    targetBtn.setAttribute('data-avatar', '{avatar_letter}');
-                    targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                    targetBtn.setAttribute('data-avatar', {avatar_letter_js});
+                    targetBtn.setAttribute('data-label', {display_name_js} + '\\n' + {email_js});
 
                     // Force-hide ALL inner elements (expand_more/expand_less icons, p, span)
                     function hideInnerElements(button) {{
@@ -1822,8 +1834,8 @@ def render_sidebar():
                     // MutationObserver: re-apply when Streamlit re-renders
                     var observer = new MutationObserver(function() {{
                         targetBtn.classList.add('sb-user-card-btn');
-                        targetBtn.setAttribute('data-avatar', '{avatar_letter}');
-                        targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                        targetBtn.setAttribute('data-avatar', {avatar_letter_js});
+                        targetBtn.setAttribute('data-label', {display_name_js} + '\\n' + {email_js});
                         hideInnerElements(targetBtn);
                     }});
                     observer.observe(targetBtn, {{ childList: true, subtree: true }});
