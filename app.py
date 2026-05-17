@@ -5,6 +5,7 @@ import io
 import html
 import datetime
 import secrets
+import json
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -1766,13 +1767,21 @@ def render_sidebar():
         # ─── BOTTOM USER PROFILE (sticky) ───
         if user:
             raw_display_name = user.get("display_name") or "Người dùng"
-            display_name = html.escape(raw_display_name)
-            email_display = html.escape(user.get("email") or "")
-            avatar_letter = html.escape(raw_display_name[0].upper()) if raw_display_name else "U"
+            raw_email = user.get("email") or ""
+            avatar_letter = raw_display_name[0].upper() if raw_display_name else "U"
+
+            # HTML-escaped versions (for HTML context like popover)
+            display_name_html = html.escape(raw_display_name)
+            email_html = html.escape(raw_email)
+
+            # JS-safe versions (for components.html script injection)
+            display_name_js = json.dumps(raw_display_name)
+            email_js = json.dumps(raw_email)
+            avatar_letter_js = json.dumps(avatar_letter)
 
             st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="sb-user-card-trigger"></div>', unsafe_allow_html=True)
-            with st.popover(f"{raw_display_name}\n{email_display}", use_container_width=True):
+            with st.popover(f"{display_name_html}\n{email_html}", use_container_width=True):
                 if st.button("⚙️ Cài đặt", key="settings_btn", use_container_width=True):
                     pass  # TODO: Future settings page
                 if st.button("🚪 Đăng xuất", key="logout_popup_btn", use_container_width=True):
@@ -1799,7 +1808,7 @@ def render_sidebar():
                     var targetBtn = null;
                     for (var i = 0; i < allPopovers.length; i++) {{
                         var b = allPopovers[i].querySelector('button');
-                        if (b && b.textContent && b.textContent.indexOf('{display_name}') !== -1) {{
+                        if (b && b.textContent && b.textContent.indexOf({display_name_js}) !== -1) {{
                             targetPopover = allPopovers[i];
                             targetBtn = b;
                             break;
@@ -1815,8 +1824,8 @@ def render_sidebar():
                     if (wrapper) wrapper.classList.add('sb-user-card-container');
 
                     // Set data attributes for CSS ::before and ::after content
-                    targetBtn.setAttribute('data-avatar', '{avatar_letter}');
-                    targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                    targetBtn.setAttribute('data-avatar', {avatar_letter_js});
+                    targetBtn.setAttribute('data-label', {display_name_js} + '\\n' + {email_js});
 
                     // Force-hide ALL inner elements (expand_more/expand_less icons, p, span)
                     function hideInnerElements(button) {{
@@ -1830,8 +1839,8 @@ def render_sidebar():
                     // MutationObserver: re-apply when Streamlit re-renders
                     var observer = new MutationObserver(function() {{
                         targetBtn.classList.add('sb-user-card-btn');
-                        targetBtn.setAttribute('data-avatar', '{avatar_letter}');
-                        targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                        targetBtn.setAttribute('data-avatar', {avatar_letter_js});
+                        targetBtn.setAttribute('data-label', {display_name_js} + '\\n' + {email_js});
                         hideInnerElements(targetBtn);
                     }});
                     observer.observe(targetBtn, {{ childList: true, subtree: true }});
