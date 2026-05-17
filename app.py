@@ -909,6 +909,14 @@ def load_custom_css():
         padding: var(--sp-16)!important;
         transition: transform 0.2s, box-shadow 0.2s!important;
     }
+
+    .stChatInput {
+        border-radius: var(--radius-md)!important;
+        border: 2px solid var(--border)!important;
+        box-shadow: var(--riso-shadow)!important;
+    }
+
+    /* === CUSTOM CHAT INPUT BAR (replaces st.chat_input for mic integration) === */
     .custom-chat-bar {
         position: fixed !important;
         bottom: 0 !important;
@@ -934,10 +942,12 @@ def load_custom_css():
         color: var(--text) !important;
         background: var(--surface, #fff) !important;
     }
+    /* Hide labels in the custom chat bar */
     .custom-chat-bar .stTextInput label,
     .custom-chat-bar .stButton label {
         display: none !important;
     }
+    /* Send button styling */
     .custom-chat-bar .stButton button {
         border-radius: var(--radius-md, 12px) !important;
         background: var(--primary, #1a237e) !important;
@@ -957,12 +967,14 @@ def load_custom_css():
         transform: translateY(1px) !important;
         box-shadow: 1px 1px 0px var(--text, #1a1a2e) !important;
     }
+    /* Mic recorder inside column — no hack needed */
     .custom-chat-bar iframe[title="streamlit_mic_recorder.streamlit_mic_recorder"] {
         border: none !important;
         border-radius: 50% !important;
         width: 42px !important;
         height: 42px !important;
     }
+    /* Add bottom padding to main content to prevent chat bar overlap */
     [data-testid="stBottomBlockContainer"] {
         padding-bottom: 80px !important;
     }
@@ -1986,6 +1998,7 @@ def render_chat_page():
         if user and st.session_state.messages:
             save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
 
+    # === CUSTOM CHAT INPUT BAR: text_input + mic + send button in one row ===
     if "input_key_counter" not in st.session_state:
         st.session_state.input_key_counter = 0
 
@@ -2012,6 +2025,7 @@ def render_chat_page():
             send_clicked = st.button("↑", key="send_btn", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # Determine final query: voice > button click > Enter key
     final_query = None
     if voice_input:
         final_query = voice_input
@@ -2019,11 +2033,13 @@ def render_chat_page():
         final_query = text_input
     st.session_state["_prev_input"] = text_input if text_input else ""
 
+    # If new query detected, save it and clear input IMMEDIATELY (before processing)
     if final_query:
         st.session_state["pending_chat_query"] = final_query
-        st.session_state.input_key_counter += 1
+        st.session_state.input_key_counter += 1  # Force text_input to reset
         st.rerun()
 
+    # Process pending query (runs on the NEXT rerun, after input is already cleared)
     if "pending_chat_query" in st.session_state:
         query = st.session_state.pending_chat_query
         del st.session_state.pending_chat_query
