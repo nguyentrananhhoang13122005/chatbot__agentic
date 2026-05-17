@@ -55,6 +55,17 @@ def test_app_defines_login_dialog_and_auth_session_state():
     assert "handle_google_callback" in source
 
 
+def test_google_oauth_uses_state_parameter():
+    source = _source()
+
+    assert "secrets.token_urlsafe(32)" in source
+    assert "st.session_state.oauth_state = state" in source
+    assert "get_google_auth_url(state=state)" in source
+    assert 'received_state = st.query_params.get("state", "")' in source
+    assert 'expected_state = st.session_state.pop("oauth_state", "")' in source
+    assert "received_state != expected_state" in source
+
+
 def test_guest_card_is_clickable_login_trigger():
     source = _source()
 
