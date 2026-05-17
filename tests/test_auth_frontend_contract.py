@@ -87,3 +87,13 @@ def test_app_resets_anonymous_chat_after_successful_login():
         nearby = "\n".join(lines[index:index + 6])
         assert "st.session_state.session_id = new_session_id()" in nearby
         assert "st.session_state.messages = []" in nearby
+
+
+def test_user_card_js_strings_escape_script_closing_tags():
+    source = _source()
+
+    assert "def _safe_js_string(value: str) -> str:" in source
+    assert 'json.dumps(value).replace("</", "<\\\\/")' in source
+    assert "display_name_js = _safe_js_string(raw_display_name)" in source
+    assert "email_js = _safe_js_string(raw_email)" in source
+    assert "avatar_letter_js = _safe_js_string(avatar_letter)" in source

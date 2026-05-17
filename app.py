@@ -65,6 +65,10 @@ def _cached_validate_api_key_v2():
     return validate_api_key()
 
 
+def _safe_js_string(value: str) -> str:
+    return json.dumps(value).replace("</", "<\\/")
+
+
 def _dataframe_to_history_text(dataframe) -> str:
     try:
         return dataframe.to_csv(index=False)
@@ -1740,9 +1744,9 @@ def render_sidebar():
             email_html = html.escape(raw_email)
 
             # JS-safe versions (for components.html script injection)
-            display_name_js = json.dumps(raw_display_name)
-            email_js = json.dumps(raw_email)
-            avatar_letter_js = json.dumps(avatar_letter)
+            display_name_js = _safe_js_string(raw_display_name)
+            email_js = _safe_js_string(raw_email)
+            avatar_letter_js = _safe_js_string(avatar_letter)
 
             st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
             with st.popover(f"{display_name_html}\n{email_html}", use_container_width=True):
