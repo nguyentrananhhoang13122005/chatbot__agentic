@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sys
 import io
+import time
 import datetime
 import secrets
 import json
@@ -41,10 +42,42 @@ init_db()
 init_auth_db()
 cleanup_old_sessions(days=20)
 
+# ── Module-level OAuth state store ──────────────────────────────
+# st.session_state is tied to the WebSocket; when the browser
+# navigates away (Google OAuth redirect) the socket disconnects
+# and the session may be lost.  A module-level dict survives
+# across Streamlit sessions inside the same server process.
+_OAUTH_TTL = 600                        # 10 minutes
+
+@st.cache_resource
+def _get_oauth_store() -> dict:
+    """Shared dict that survives Streamlit reruns."""
+    return {}
+
+def _store_oauth_state(state: str):
+    store = _get_oauth_store()
+    store[state] = time.time()
+    cutoff = time.time() - _OAUTH_TTL
+    for k in [k for k, v in store.items() if v < cutoff]:
+        store.pop(k, None)
+
+def _consume_oauth_state(state: str) -> bool:
+    store = _get_oauth_store()
+    if state and state in store:
+        ts = store.pop(state)
+        return (time.time() - ts) < _OAUTH_TTL
+    return False
+
 if "code" in st.query_params:
     received_state = st.query_params.get("state", "")
-    expected_state = st.session_state.pop("oauth_state", "")
-    if not received_state or received_state != expected_state:
+    # Module-level store survives session reset; fall back to session_state
+    state_ok = _consume_oauth_state(received_state)
+    if not state_ok:
+        expected_state = st.session_state.pop("oauth_state", "")
+        state_ok = bool(received_state and received_state == expected_state)
+    else:
+        st.session_state.pop("oauth_state", None)
+    if not state_ok:
         st.session_state.auth_toast = "⚠️ Phiên đăng nhập không hợp lệ. Vui lòng thử lại."
     else:
         user = handle_google_callback(st.query_params["code"])
@@ -1550,6 +1583,7 @@ if st.session_state.get("auth_toast"):
 def login_dialog():
     state = secrets.token_urlsafe(32)
     st.session_state.oauth_state = state
+    _store_oauth_state(state)
     google_auth_url = get_google_auth_url(state=state)
     st.markdown("**Đăng nhập nhanh**")
     st.link_button("🔵 Tiếp tục bằng Google", google_auth_url, use_container_width=True)
@@ -1569,7 +1603,7 @@ def login_dialog():
                 st.session_state.session_id = new_session_id()
                 st.session_state.messages = []
                 st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
-                st.rerun()
+                st.rerun(scope="app")
 
     with tab_register:
         reg_name = st.text_input("Họ và tên", key="reg_name")
@@ -1588,7 +1622,7 @@ def login_dialog():
                     st.session_state.session_id = new_session_id()
                     st.session_state.messages = []
                     st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
-                    st.rerun()
+                    st.rerun(scope="app")
 
 
 # === SIDEBAR ===

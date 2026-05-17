@@ -60,10 +60,11 @@ def test_google_oauth_uses_state_parameter():
 
     assert "secrets.token_urlsafe(32)" in source
     assert "st.session_state.oauth_state = state" in source
+    assert "_store_oauth_state(state)" in source
     assert "get_google_auth_url(state=state)" in source
     assert 'received_state = st.query_params.get("state", "")' in source
-    assert 'expected_state = st.session_state.pop("oauth_state", "")' in source
-    assert "received_state != expected_state" in source
+    assert "_consume_oauth_state(received_state)" in source
+    assert 'st.session_state.pop("oauth_state", "")' in source
 
 
 def test_guest_card_is_clickable_login_trigger():
