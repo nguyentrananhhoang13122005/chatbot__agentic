@@ -348,10 +348,17 @@ def load_custom_css():
         box-shadow: 5px 5px 0px var(--primary) !important;
     }
 
-    /* Hide default button inner elements */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button > * {
+    /* Hide ALL inner elements (including nested expand_more/expand_less icons) */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button *,
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button span,
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button p {
         display: none !important;
         visibility: hidden !important;
+        font-size: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        position: absolute !important;
     }
 
     /* Avatar via ::before */
