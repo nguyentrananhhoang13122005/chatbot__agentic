@@ -688,22 +688,6 @@ def load_custom_css():
         background: var(--primary); display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
         border: 1px solid var(--border);
     }
-    .sb-user {
-        background:var(--surface); border-radius:var(--radius-md);
-        padding:var(--sp-8); margin:0 0 var(--sp-12);
-        border: 2px solid var(--border);
-        box-shadow: 3px 3px 0px var(--secondary);
-        display:flex; align-items:center; gap:var(--sp-12);
-        transition: transform 0.2s, box-shadow 0.2s;
-        cursor: pointer;
-    }
-    .sb-user:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 5px 5px 0px var(--primary);
-    }
-    .sb-user:hover .sb-avatar {
-        animation: wiggle 0.5s ease;
-    }
     .guest-login-card-marker {
         display: none;
     }
@@ -760,14 +744,6 @@ def load_custom_css():
         font-size: 16px !important;
         font-weight: 700 !important;
     }
-    .sb-avatar {
-        width:40px; height:40px; border-radius:var(--radius-sm);
-        background: var(--primary); border: 2px solid var(--border);
-        display:flex; align-items:center; justify-content:center;
-        font-size:20px; flex-shrink:0; color: var(--surface);
-    }
-    .sb-uname { font-weight:700; font-size:16px; color:var(--text); }
-    .sb-urole { font-family: var(--font-mono); font-size:12px; color:var(--secondary); margin-top:2px; font-weight:600;}
     .sb-section {
         font-family: var(--font-mono);
         font-size:14px; font-weight:700; color:var(--text);
@@ -1244,15 +1220,6 @@ def load_custom_css():
     html[data-theme="dark"] .sb-tag {
         color: var(--surface);
     }
-    html[data-theme="dark"] .sb-user {
-        background: var(--surface);
-        border-color: var(--border);
-        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5);
-    }
-    html[data-theme="dark"] .sb-user:hover {
-        box-shadow: 5px 5px 0px var(--primary);
-    }
-    html[data-theme="dark"] .sb-uname { color: var(--text); }
     html[data-theme="dark"] .sb-section {
         color: var(--text);
         border-bottom-color: var(--border);
