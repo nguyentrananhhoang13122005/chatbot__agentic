@@ -1706,6 +1706,7 @@ def render_sidebar():
                     st.rerun()
 
             # JS: Set avatar letter + label as data attributes on popover button for CSS
+            # Also forcibly hide inner elements (expand_more/expand_less icons) via inline styles
             components.html(f"""
             <script>
             (function applyUserCard() {{
@@ -1723,6 +1724,26 @@ def render_sidebar():
                     if (btn) {{
                         btn.setAttribute('data-avatar', '{avatar_letter}');
                         btn.setAttribute('data-label', '{display_name}\\n{email_display}');
+
+                        // Force-hide ALL inner elements (expand_more/expand_less icons, p, span, div)
+                        function hideInnerElements(button) {{
+                            var children = button.querySelectorAll('*');
+                            for (var i = 0; i < children.length; i++) {{
+                                children[i].style.cssText = 'display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important;position:absolute!important;font-size:0!important;';
+                            }}
+                        }}
+                        hideInnerElements(btn);
+
+                        // Re-apply when Streamlit re-renders the button contents
+                        var observer = new MutationObserver(function(mutations) {{
+                            hideInnerElements(btn);
+                            // Re-set attributes in case button was recreated
+                            if (!btn.getAttribute('data-avatar')) {{
+                                btn.setAttribute('data-avatar', '{avatar_letter}');
+                                btn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                            }}
+                        }});
+                        observer.observe(btn, {{ childList: true, subtree: true }});
                     }} else {{
                         setTimeout(applyUserCard, 300);
                     }}
