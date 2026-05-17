@@ -4,6 +4,7 @@ import sys
 import io
 import html
 import datetime
+import secrets
 
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
@@ -41,14 +42,19 @@ init_auth_db()
 cleanup_old_sessions(days=20)
 
 if "code" in st.query_params:
-    user = handle_google_callback(st.query_params["code"])
-    if user:
-        st.session_state.user = user
-        st.session_state.session_id = new_session_id()
-        st.session_state.messages = []
-        st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+    received_state = st.query_params.get("state", "")
+    expected_state = st.session_state.pop("oauth_state", "")
+    if not received_state or received_state != expected_state:
+        st.session_state.auth_toast = "⚠️ Phiên đăng nhập không hợp lệ. Vui lòng thử lại."
     else:
-        st.session_state.auth_toast = "Không thể đăng nhập bằng Google. Vui lòng thử lại."
+        user = handle_google_callback(st.query_params["code"])
+        if user:
+            st.session_state.user = user
+            st.session_state.session_id = new_session_id()
+            st.session_state.messages = []
+            st.session_state.auth_toast = f"✅ Chào mừng {user['display_name']}!"
+        else:
+            st.session_state.auth_toast = "Không thể đăng nhập bằng Google. Vui lòng thử lại."
     st.query_params.clear()
     st.rerun()
 
@@ -1573,7 +1579,9 @@ if st.session_state.get("auth_toast"):
 
 @st.dialog("Đăng nhập hoặc đăng ký", width="small")
 def login_dialog():
-    google_auth_url = get_google_auth_url()
+    state = secrets.token_urlsafe(32)
+    st.session_state.oauth_state = state
+    google_auth_url = get_google_auth_url(state=state)
     st.markdown("**Đăng nhập nhanh**")
     st.link_button("🔵 Tiếp tục bằng Google", google_auth_url, use_container_width=True)
     st.divider()

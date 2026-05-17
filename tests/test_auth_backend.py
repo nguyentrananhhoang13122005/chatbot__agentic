@@ -162,3 +162,15 @@ class TestChatDbUserScoping:
         assert chat_db.list_sessions(user_id="owner")[0]["bookmarked"] is False
         assert chat_db.toggle_bookmark("bookmark-session", user_id="owner") is True
         assert chat_db.list_sessions(user_id="owner")[0]["bookmarked"] is True
+
+
+class TestOAuthState:
+    def test_get_google_auth_url_includes_state_param(self, auth_modules):
+        _, auth, _ = auth_modules
+        url = auth.get_google_auth_url(state="abc123")
+        assert "state=abc123" in url
+
+    def test_get_google_auth_url_without_state_has_no_state_param(self, auth_modules):
+        _, auth, _ = auth_modules
+        url = auth.get_google_auth_url()
+        assert "state=" not in url

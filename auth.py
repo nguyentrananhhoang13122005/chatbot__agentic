@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 from urllib.parse import urlencode
 
 import requests
@@ -29,7 +30,7 @@ def _sanitize_user(user: dict | None) -> dict | None:
     }
 
 
-def get_google_auth_url() -> str:
+def get_google_auth_url(state: str | None = None) -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501")
     params = {
@@ -40,6 +41,8 @@ def get_google_auth_url() -> str:
         "access_type": "offline",
         "prompt": "select_account",
     }
+    if state:
+        params["state"] = state
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
