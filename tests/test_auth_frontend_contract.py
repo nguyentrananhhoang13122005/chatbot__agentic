@@ -35,6 +35,17 @@ def test_app_imports_auth_backend_contract():
     assert "load_session_for_user" in imported
 
 
+def test_app_keeps_voice_chat_contract_from_main():
+    imported = _imported_names()
+    source = _source()
+
+    assert "speech_to_text" in imported
+    assert "generate_audio_from_text" in imported
+    assert "custom-chat-bar" in source
+    assert "pending_chat_query" in source
+    assert "st.session_state.input_key_counter" in source
+
+
 def test_app_defines_login_dialog_and_auth_session_state():
     source = _source()
     functions = {node.name for node in ast.walk(_tree()) if isinstance(node, ast.FunctionDef)}

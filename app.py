@@ -30,6 +30,8 @@ from auth import (
     register_user,
     logout,
 )
+from streamlit_mic_recorder import speech_to_text
+from utils.audio_utils import generate_audio_from_text
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
@@ -906,6 +908,63 @@ def load_custom_css():
         box-shadow: 3px 3px 0px var(--text)!important;
         padding: var(--sp-16)!important;
         transition: transform 0.2s, box-shadow 0.2s!important;
+    }
+    .custom-chat-bar {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 99 !important;
+        background: var(--surface, #fff) !important;
+        border-top: 2px solid var(--border, #e0e0e0) !important;
+        padding: 12px 16px !important;
+    }
+    .custom-chat-bar .stTextInput > div > div {
+        border-radius: var(--radius-md, 12px) !important;
+        border: 2px solid var(--border, #ccc) !important;
+    }
+    .custom-chat-bar .stTextInput > div > div:focus-within {
+        border-color: var(--primary, #1a237e) !important;
+        box-shadow: 4px 4px 0px var(--primary, #1a237e) !important;
+    }
+    .custom-chat-bar .stTextInput input {
+        font-family: var(--font-sans) !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        color: var(--text) !important;
+        background: var(--surface, #fff) !important;
+    }
+    .custom-chat-bar .stTextInput label,
+    .custom-chat-bar .stButton label {
+        display: none !important;
+    }
+    .custom-chat-bar .stButton button {
+        border-radius: var(--radius-md, 12px) !important;
+        background: var(--primary, #1a237e) !important;
+        color: white !important;
+        border: 2px solid var(--text, #1a1a2e) !important;
+        font-weight: 700 !important;
+        padding: 8px 16px !important;
+        height: 42px !important;
+        box-shadow: 3px 3px 0px var(--text, #1a1a2e) !important;
+        transition: transform 0.1s, box-shadow 0.1s !important;
+    }
+    .custom-chat-bar .stButton button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 4px 4px 0px var(--text, #1a1a2e) !important;
+    }
+    .custom-chat-bar .stButton button:active {
+        transform: translateY(1px) !important;
+        box-shadow: 1px 1px 0px var(--text, #1a1a2e) !important;
+    }
+    .custom-chat-bar iframe[title="streamlit_mic_recorder.streamlit_mic_recorder"] {
+        border: none !important;
+        border-radius: 50% !important;
+        width: 42px !important;
+        height: 42px !important;
+    }
+    [data-testid="stBottomBlockContainer"] {
+        padding-bottom: 80px !important;
     }
     [data-testid="stChatMessage"]:hover {
         transform: translateY(-2px)!important;
@@ -1901,9 +1960,15 @@ def render_chat_page():
                 st.rerun()
 
     # Hiển thị lịch sử hội thoại
-    for msg in st.session_state.messages:
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
             st.write(msg["content"])
+            if msg["role"] == "assistant":
+                if st.button("🔊 Nghe", key=f"tts_{i}"):
+                    with st.spinner("Đang tạo giọng nói..."):
+                        audio_bytes = generate_audio_from_text(msg["content"])
+                        if audio_bytes:
+                            st.audio(audio_bytes, format='audio/mp3', autoplay=True)
 
     # Xử lý câu hỏi đang chờ (từ nút gợi ý)
     if "pending_query" in st.session_state:
@@ -1921,19 +1986,59 @@ def render_chat_page():
         if user and st.session_state.messages:
             save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
 
-    # Xử lý câu hỏi nhập từ ô chat
-    if prompt := st.chat_input("Nhập câu hỏi... (VD: Điểm chuẩn Bách Khoa 2024?)"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    if "input_key_counter" not in st.session_state:
+        st.session_state.input_key_counter = 0
+
+    with st.container():
+        st.markdown('<div class="custom-chat-bar">', unsafe_allow_html=True)
+        col_input, col_mic, col_send = st.columns([20, 1, 2])
+        with col_input:
+            text_input = st.text_input(
+                "chat_input",
+                placeholder="Nhập câu hỏi... (VD: Điểm chuẩn Bách Khoa 2024?)",
+                label_visibility="collapsed",
+                key=f"custom_chat_input_{st.session_state.input_key_counter}"
+            )
+        with col_mic:
+            voice_input = speech_to_text(
+                language='vi-VN',
+                start_prompt='🎙️',
+                stop_prompt='🛑',
+                use_container_width=False,
+                just_once=True,
+                key='STT'
+            )
+        with col_send:
+            send_clicked = st.button("↑", key="send_btn", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    final_query = None
+    if voice_input:
+        final_query = voice_input
+    elif text_input and (send_clicked or st.session_state.get("_prev_input") != text_input):
+        final_query = text_input
+    st.session_state["_prev_input"] = text_input if text_input else ""
+
+    if final_query:
+        st.session_state["pending_chat_query"] = final_query
+        st.session_state.input_key_counter += 1
+        st.rerun()
+
+    if "pending_chat_query" in st.session_state:
+        query = st.session_state.pending_chat_query
+        del st.session_state.pending_chat_query
+        st.session_state.messages.append({"role": "user", "content": query})
         with st.chat_message("user", avatar="👤"):
-            st.write(prompt)
+            st.write(query)
         with st.chat_message("assistant", avatar="🤖"):
-            response = _process_query(prompt, uploaded_cv)
+            response = _process_query(query, uploaded_cv)
         if response:
             st.session_state.messages.append({"role": "assistant", "content": str(response)})
         # === AUTO-SAVE ===
         user = st.session_state.get("user")
         if user and st.session_state.messages:
             save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
+            st.rerun()
 
 
 # === RENDER ===
@@ -1957,9 +2062,7 @@ components.html(f"""
                 localStorage.setItem('unisearch-theme', theme);
             }} catch(e) {{}}
         }}
-        // Apply immediately
         applyTheme();
-        // Re-apply after short delay (Streamlit may re-render DOM)
         setTimeout(applyTheme, 100);
         setTimeout(applyTheme, 500);
     }})();
