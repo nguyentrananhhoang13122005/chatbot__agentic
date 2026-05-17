@@ -1,6 +1,5 @@
 import os
 import re
-import secrets
 from urllib.parse import urlencode
 
 import requests
