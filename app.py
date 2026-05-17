@@ -479,7 +479,7 @@ def load_custom_css():
     
     /* Popover button (3 dots) — override Streamlit's emotion-cache white bg & overflow:hidden */
     [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:last-child button,
-    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button {
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button {
         background: transparent !important;
         background-color: transparent !important;
         border: none !important;
@@ -496,7 +496,7 @@ def load_custom_css():
     }
     
     /* Hide ALL child elements inside the popover button */
-    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button * {
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button * {
         display: none !important;
         visibility: hidden !important;
         width: 0 !important;
@@ -505,7 +505,7 @@ def load_custom_css():
     }
     
     /* Inject 3 dots via ::after pseudo-element */
-    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button::after {
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button::after {
         content: "⋮";
         color: #666 !important;
         font-size: 22px !important;
@@ -526,12 +526,12 @@ def load_custom_css():
     
     /* Hover effects */
     [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:last-child button:hover,
-    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover {
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button:hover {
         opacity: 1;
         background: rgba(0,0,0,0.05) !important;
         border-radius: 6px;
     }
-    [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover::after {
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button:hover::after {
         color: var(--primary) !important;
     }
     
@@ -1220,13 +1220,13 @@ def load_custom_css():
         color: var(--text) !important;
     }
     html[data-theme="dark"] .hist-time { color: #888; }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button::after {
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button::after {
         color: #aaa !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover {
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button:hover {
         background: rgba(255,255,255,0.08) !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.hist-row-marker) .stPopover button:hover::after {
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) + div .stPopover button:hover::after {
         color: var(--primary) !important;
     }
 
