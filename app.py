@@ -291,6 +291,138 @@ def load_custom_css():
         color: var(--text);
     }
 
+    /* === SIDEBAR FLEX LAYOUT (sticky bottom user) === */
+    [data-testid="stSidebar"] > div:first-child {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 100vh !important;
+    }
+    [data-testid="stSidebar"] > div:first-child > div[data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        flex-grow: 1 !important;
+    }
+
+    /* Bottom spacer pushes user section to bottom */
+    .sb-bottom-spacer { display: none; }
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.sb-bottom-spacer) {
+        flex-grow: 1 !important;
+        min-height: var(--sp-24) !important;
+    }
+
+    /* === BOTTOM USER PROFILE CARD === */
+    .sb-user-card-trigger { display: none; }
+
+    /* Container border-top separator */
+    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.sb-user-card-trigger) + div {
+        border-top: 2px solid var(--border);
+        padding-top: var(--sp-8);
+        margin-top: var(--sp-8);
+    }
+
+    /* Popover trigger → user card appearance */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button {
+        background: var(--surface) !important;
+        border: 2px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: 3px 3px 0px var(--secondary) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: var(--sp-12) !important;
+        padding: var(--sp-8) var(--sp-12) !important;
+        min-height: 56px !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        cursor: pointer !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+        position: relative !important;
+        overflow: visible !important;
+        width: 100% !important;
+        font-size: 0 !important;
+        color: transparent !important;
+    }
+
+    /* Hover effect — Riso style */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button:hover {
+        transform: translate(-2px, -2px) !important;
+        box-shadow: 5px 5px 0px var(--primary) !important;
+    }
+
+    /* Hide default button inner elements */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button > * {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Avatar via ::before */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::before {
+        content: attr(data-avatar);
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: var(--radius-sm);
+        background: var(--primary);
+        border: 2px solid var(--border);
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        font-weight: 800 !important;
+        color: var(--surface) !important;
+        visibility: visible !important;
+        flex-shrink: 0;
+    }
+
+    /* Name + email via ::after — reads from button's inner <p> text via content trick */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::after {
+        content: attr(data-label);
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        color: var(--text) !important;
+        font-family: var(--font-sans) !important;
+        visibility: visible !important;
+        white-space: pre-line !important;
+        line-height: 1.4 !important;
+        text-align: left !important;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* === USER PROFILE POPUP MENU === */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] {
+        border: 2px solid var(--border) !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: 4px 4px 0px var(--secondary) !important;
+        padding: var(--sp-8) !important;
+        background: var(--surface) !important;
+        animation: popupFadeSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        min-width: 200px !important;
+    }
+
+    /* Popup menu buttons */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: var(--text) !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        padding: var(--sp-8) var(--sp-12) !important;
+        width: 100% !important;
+        border-radius: var(--radius-sm) !important;
+        transition: background 0.15s ease, color 0.15s ease !important;
+        cursor: pointer !important;
+    }
+
+    /* Menu item hover */
+    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button:hover {
+        background: rgba(242, 55, 161, 0.08) !important;
+        color: var(--primary) !important;
+    }
+
     /* === HISTORY ITEM STYLE (Minimal & Flat) === */
     [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) {
         border-radius: 8px;
@@ -880,6 +1012,10 @@ def load_custom_css():
         0% { opacity: 0; transform: translateY(20px); }
         100% { opacity: 1; transform: translateY(0); }
     }
+    @keyframes popupFadeSlideUp {
+        0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
     @keyframes float {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-8px); }
@@ -1037,6 +1173,40 @@ def load_custom_css():
     html[data-theme="dark"] .sb-section {
         color: var(--text);
         border-bottom-color: var(--border);
+    }
+
+    /* --- Bottom User Profile (Dark Mode) --- */
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.sb-user-card-trigger) + div {
+        border-top-color: var(--border);
+    }
+
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button {
+        background: var(--surface) !important;
+        border-color: var(--border) !important;
+        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button:hover {
+        box-shadow: 5px 5px 0px var(--primary) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::before {
+        border-color: var(--border);
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::after {
+        color: var(--text) !important;
+    }
+
+    /* Popup menu dark mode */
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] {
+        background: var(--surface) !important;
+        border-color: var(--border) !important;
+        box-shadow: 4px 4px 0px rgba(44, 64, 167, 0.4) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button {
+        color: var(--text) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button:hover {
+        background: rgba(242, 55, 161, 0.12) !important;
+        color: var(--primary) !important;
     }
 
     /* --- History Items --- */
@@ -1380,32 +1550,10 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         user = st.session_state.get("user")
-        if user:
-            raw_display_name = user.get("display_name") or "Người dùng"
-            display_name = html.escape(raw_display_name)
-            email = html.escape(user.get("email") or "")
-            avatar_letter = html.escape(raw_display_name[0].upper()) if raw_display_name else "U"
-            st.markdown(f"""
-            <div class="sb-user">
-                <div class="sb-avatar">{avatar_letter}</div>
-                <div>
-                    <div class="sb-uname">{display_name}</div>
-                    <div class="sb-urole">{email}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
+        if not user:
             st.markdown('<span class="guest-login-card-marker"></span>', unsafe_allow_html=True)
             if st.button("Khách\nĐĂNG NHẬP ĐỂ LƯU LỊCH SỬ", key="guest_login_card", use_container_width=True, type="secondary"):
                 login_dialog()
-
-        if user:
-            if st.button("🚪 Đăng xuất", key="logout_btn", use_container_width=True, type="secondary"):
-                logout()
-                st.session_state.session_id = new_session_id()
-                st.session_state.messages = []
-                st.session_state.auth_toast = "👋 Đã đăng xuất."
-                st.rerun()
 
         # === THEME TOGGLE ===
         current_theme = st.session_state.get("theme", "light")
@@ -1530,6 +1678,51 @@ def render_sidebar():
                 st.session_state.messages = []
                 st.toast("✅ Đã xoá lịch sử chat của bạn.")
                 st.rerun()
+
+        # ─── BOTTOM USER PROFILE (sticky) ───
+        if user:
+            raw_display_name = user.get("display_name") or "Người dùng"
+            display_name = html.escape(raw_display_name)
+            email_display = html.escape(user.get("email") or "")
+            avatar_letter = html.escape(raw_display_name[0].upper()) if raw_display_name else "U"
+
+            st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sb-user-card-trigger"></div>', unsafe_allow_html=True)
+            with st.popover(f"{raw_display_name}\n{email_display}", use_container_width=True):
+                if st.button("⚙️ Cài đặt", key="settings_btn", use_container_width=True):
+                    pass  # TODO: Future settings page
+                if st.button("🚪 Đăng xuất", key="logout_popup_btn", use_container_width=True):
+                    logout()
+                    st.session_state.session_id = new_session_id()
+                    st.session_state.messages = []
+                    st.session_state.auth_toast = "👋 Đã đăng xuất."
+                    st.rerun()
+
+            # JS: Set avatar letter + label as data attributes on popover button for CSS
+            components.html(f"""
+            <script>
+            (function applyUserCard() {{
+                try {{
+                    var doc = window.parent.document;
+                    var markers = doc.querySelectorAll('.sb-user-card-trigger');
+                    if (!markers.length) return setTimeout(applyUserCard, 300);
+                    var marker = markers[markers.length - 1];
+                    var markerParent = marker.parentElement;
+                    while (markerParent && !markerParent.parentElement.matches('[data-testid="stVerticalBlock"]')) {{
+                        markerParent = markerParent.parentElement;
+                    }}
+                    if (!markerParent || !markerParent.nextElementSibling) return setTimeout(applyUserCard, 300);
+                    var btn = markerParent.nextElementSibling.querySelector('.stPopover button');
+                    if (btn) {{
+                        btn.setAttribute('data-avatar', '{avatar_letter}');
+                        btn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                    }} else {{
+                        setTimeout(applyUserCard, 300);
+                    }}
+                }} catch(e) {{ setTimeout(applyUserCard, 500); }}
+            }})();
+            </script>
+            """, height=0, scrolling=False)
 
 
 # === HOME PAGE ===
