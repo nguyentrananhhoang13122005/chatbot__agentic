@@ -313,15 +313,15 @@ def load_custom_css():
     /* === BOTTOM USER PROFILE CARD === */
     .sb-user-card-trigger { display: none; }
 
-    /* Container border-top separator */
-    [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.sb-user-card-trigger) + div {
-        border-top: 2px solid var(--border);
-        padding-top: var(--sp-8);
-        margin-top: var(--sp-8);
+    /* Container border-top separator (class added via JS) */
+    .sb-user-card-container {
+        border-top: 2px solid var(--border) !important;
+        padding-top: var(--sp-8) !important;
+        margin-top: var(--sp-8) !important;
     }
 
-    /* Popover trigger → user card appearance */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button {
+    /* Popover trigger → user card appearance (class added via JS) */
+    button.sb-user-card-btn {
         background: var(--surface) !important;
         border: 2px solid var(--border) !important;
         border-radius: var(--radius-md) !important;
@@ -336,22 +336,20 @@ def load_custom_css():
         cursor: pointer !important;
         transition: transform 0.2s ease, box-shadow 0.2s ease !important;
         position: relative !important;
-        overflow: visible !important;
+        overflow: hidden !important;
         width: 100% !important;
         font-size: 0 !important;
         color: transparent !important;
     }
 
     /* Hover effect — Riso style */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button:hover {
+    button.sb-user-card-btn:hover {
         transform: translate(-2px, -2px) !important;
         box-shadow: 5px 5px 0px var(--primary) !important;
     }
 
-    /* Hide ALL inner elements (including nested expand_more/expand_less icons) */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button *,
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button span,
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button p {
+    /* Hide ALL inner elements (expand_more/expand_less icons, p, span) */
+    button.sb-user-card-btn * {
         display: none !important;
         visibility: hidden !important;
         font-size: 0 !important;
@@ -362,7 +360,7 @@ def load_custom_css():
     }
 
     /* Avatar via ::before */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::before {
+    button.sb-user-card-btn::before {
         content: attr(data-avatar);
         width: 40px;
         height: 40px;
@@ -380,8 +378,8 @@ def load_custom_css():
         flex-shrink: 0;
     }
 
-    /* Name + email via ::after — reads from button's inner <p> text via content trick */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::after {
+    /* Name + email via ::after */
+    button.sb-user-card-btn::after {
         content: attr(data-label);
         font-size: 14px !important;
         font-weight: 600 !important;
@@ -397,7 +395,7 @@ def load_custom_css():
     }
 
     /* === USER PROFILE POPUP MENU === */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] {
+    .sb-user-popover div[data-testid="stPopoverBody"] {
         border: 2px solid var(--border) !important;
         border-radius: var(--radius-md) !important;
         box-shadow: 4px 4px 0px var(--secondary) !important;
@@ -408,7 +406,7 @@ def load_custom_css():
     }
 
     /* Popup menu buttons */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button {
+    .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -425,7 +423,7 @@ def load_custom_css():
     }
 
     /* Menu item hover */
-    [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button:hover {
+    .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button:hover {
         background: rgba(242, 55, 161, 0.08) !important;
         color: var(--primary) !important;
     }
@@ -1183,35 +1181,35 @@ def load_custom_css():
     }
 
     /* --- Bottom User Profile (Dark Mode) --- */
-    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.sb-user-card-trigger) + div {
+    html[data-theme="dark"] .sb-user-card-container {
         border-top-color: var(--border);
     }
 
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button {
+    html[data-theme="dark"] button.sb-user-card-btn {
         background: var(--surface) !important;
         border-color: var(--border) !important;
         box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5) !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button:hover {
+    html[data-theme="dark"] button.sb-user-card-btn:hover {
         box-shadow: 5px 5px 0px var(--primary) !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::before {
+    html[data-theme="dark"] button.sb-user-card-btn::before {
         border-color: var(--border);
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover > button::after {
+    html[data-theme="dark"] button.sb-user-card-btn::after {
         color: var(--text) !important;
     }
 
     /* Popup menu dark mode */
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] {
+    html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] {
         background: var(--surface) !important;
         border-color: var(--border) !important;
         box-shadow: 4px 4px 0px rgba(44, 64, 167, 0.4) !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button {
+    html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button {
         color: var(--text) !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] div:has(.sb-user-card-trigger) + div .stPopover div[data-testid="stPopoverBody"] div.stButton > button:hover {
+    html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button:hover {
         background: rgba(242, 55, 161, 0.12) !important;
         color: var(--primary) !important;
     }
@@ -1705,48 +1703,59 @@ def render_sidebar():
                     st.session_state.auth_toast = "👋 Đã đăng xuất."
                     st.rerun()
 
-            # JS: Set avatar letter + label as data attributes on popover button for CSS
-            # Also forcibly hide inner elements (expand_more/expand_less icons) via inline styles
+            # JS: Add CSS classes + data attributes to popover elements for reliable styling
             components.html(f"""
             <script>
             (function applyUserCard() {{
                 try {{
                     var doc = window.parent.document;
-                    var markers = doc.querySelectorAll('.sb-user-card-trigger');
-                    if (!markers.length) return setTimeout(applyUserCard, 300);
-                    var marker = markers[markers.length - 1];
-                    var markerParent = marker.parentElement;
-                    while (markerParent && !markerParent.parentElement.matches('[data-testid="stVerticalBlock"]')) {{
-                        markerParent = markerParent.parentElement;
-                    }}
-                    if (!markerParent || !markerParent.nextElementSibling) return setTimeout(applyUserCard, 300);
-                    var btn = markerParent.nextElementSibling.querySelector('.stPopover button');
-                    if (btn) {{
-                        btn.setAttribute('data-avatar', '{avatar_letter}');
-                        btn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                    // Find the popover button in the sidebar
+                    var sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                    if (!sidebar) return setTimeout(applyUserCard, 300);
 
-                        // Force-hide ALL inner elements (expand_more/expand_less icons, p, span, div)
-                        function hideInnerElements(button) {{
-                            var children = button.querySelectorAll('*');
-                            for (var i = 0; i < children.length; i++) {{
-                                children[i].style.cssText = 'display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important;position:absolute!important;font-size:0!important;';
-                            }}
+                    // Strategy: find ALL .stPopover buttons in sidebar, pick the one
+                    // whose text content contains the user's display name
+                    var allPopovers = sidebar.querySelectorAll('.stPopover');
+                    var targetPopover = null;
+                    var targetBtn = null;
+                    for (var i = 0; i < allPopovers.length; i++) {{
+                        var b = allPopovers[i].querySelector('button');
+                        if (b && b.textContent && b.textContent.indexOf('{display_name}') !== -1) {{
+                            targetPopover = allPopovers[i];
+                            targetBtn = b;
+                            break;
                         }}
-                        hideInnerElements(btn);
-
-                        // Re-apply when Streamlit re-renders the button contents
-                        var observer = new MutationObserver(function(mutations) {{
-                            hideInnerElements(btn);
-                            // Re-set attributes in case button was recreated
-                            if (!btn.getAttribute('data-avatar')) {{
-                                btn.setAttribute('data-avatar', '{avatar_letter}');
-                                btn.setAttribute('data-label', '{display_name}\\n{email_display}');
-                            }}
-                        }});
-                        observer.observe(btn, {{ childList: true, subtree: true }});
-                    }} else {{
-                        setTimeout(applyUserCard, 300);
                     }}
+                    if (!targetBtn) return setTimeout(applyUserCard, 300);
+
+                    // Add CSS classes for reliable selector matching
+                    targetBtn.classList.add('sb-user-card-btn');
+                    targetPopover.classList.add('sb-user-popover');
+                    // Add container class to the wrapper div for border-top
+                    var wrapper = targetPopover.parentElement;
+                    if (wrapper) wrapper.classList.add('sb-user-card-container');
+
+                    // Set data attributes for CSS ::before and ::after content
+                    targetBtn.setAttribute('data-avatar', '{avatar_letter}');
+                    targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+
+                    // Force-hide ALL inner elements (expand_more/expand_less icons, p, span)
+                    function hideInnerElements(button) {{
+                        var children = button.querySelectorAll('*');
+                        for (var j = 0; j < children.length; j++) {{
+                            children[j].style.cssText = 'display:none!important;visibility:hidden!important;width:0!important;height:0!important;overflow:hidden!important;position:absolute!important;font-size:0!important;';
+                        }}
+                    }}
+                    hideInnerElements(targetBtn);
+
+                    // MutationObserver: re-apply when Streamlit re-renders
+                    var observer = new MutationObserver(function() {{
+                        targetBtn.classList.add('sb-user-card-btn');
+                        targetBtn.setAttribute('data-avatar', '{avatar_letter}');
+                        targetBtn.setAttribute('data-label', '{display_name}\\n{email_display}');
+                        hideInnerElements(targetBtn);
+                    }});
+                    observer.observe(targetBtn, {{ childList: true, subtree: true }});
                 }} catch(e) {{ setTimeout(applyUserCard, 500); }}
             }})();
             </script>
