@@ -320,8 +320,6 @@ def load_custom_css():
     }
 
     /* === BOTTOM USER PROFILE CARD === */
-    .sb-user-card-trigger { display: none; }
-
     /* Container border-top separator (class added via JS) */
     .sb-user-card-container {
         border-top: 2px solid var(--border) !important;
@@ -1747,10 +1745,9 @@ def render_sidebar():
             avatar_letter_js = json.dumps(avatar_letter)
 
             st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="sb-user-card-trigger"></div>', unsafe_allow_html=True)
             with st.popover(f"{display_name_html}\n{email_html}", use_container_width=True):
                 if st.button("⚙️ Cài đặt", key="settings_btn", use_container_width=True):
-                    pass  # TODO: Future settings page
+                    st.toast("🚧 Tính năng đang phát triển.")
                 if st.button("🚪 Đăng xuất", key="logout_popup_btn", use_container_width=True):
                     logout()
                     st.session_state.session_id = new_session_id()
