@@ -2,7 +2,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import sys
 import io
-import html
 import datetime
 import secrets
 import json
@@ -1738,18 +1737,12 @@ def render_sidebar():
             raw_display_name = user.get("display_name") or "Người dùng"
             raw_email = user.get("email") or ""
             avatar_letter = raw_display_name[0].upper() if raw_display_name else "U"
-
-            # HTML-escaped versions (for HTML context like popover)
-            display_name_html = html.escape(raw_display_name)
-            email_html = html.escape(raw_email)
-
-            # JS-safe versions (for components.html script injection)
             display_name_js = _safe_js_string(raw_display_name)
             email_js = _safe_js_string(raw_email)
             avatar_letter_js = _safe_js_string(avatar_letter)
 
             st.markdown('<div class="sb-bottom-spacer"></div>', unsafe_allow_html=True)
-            with st.popover(f"{display_name_html}\n{email_html}", use_container_width=True):
+            with st.popover(f"{raw_display_name}\n{raw_email}", use_container_width=True):
                 if st.button("⚙️ Cài đặt", key="settings_btn", use_container_width=True):
                     st.toast("🚧 Tính năng đang phát triển.")
                 if st.button("🚪 Đăng xuất", key="logout_popup_btn", use_container_width=True):
