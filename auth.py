@@ -105,8 +105,8 @@ def register_user(email: str, display_name: str, password: str) -> tuple[dict | 
         return None, "Email không hợp lệ."
     if not cleaned_name:
         return None, "Vui lòng nhập họ và tên."
-    if len(password or "") < 6:
-        return None, "Mật khẩu phải có ít nhất 6 ký tự."
+    if len(password or "") < 8:
+        return None, "Mật khẩu phải có ít nhất 8 ký tự."
     if get_user_by_email(normalized_email):
         return None, "Email này đã được đăng ký."
 
@@ -126,11 +126,11 @@ def login_user(email: str, password: str) -> tuple[dict | None, str | None]:
     user = get_user_by_email(normalized_email)
 
     if user is None:
-        return None, "Email không tồn tại."
+        return None, "Email hoặc mật khẩu không đúng."
     if user.get("auth_provider") == "google" and not user.get("password_hash"):
         return None, "Tài khoản này dùng Google. Vui lòng đăng nhập bằng Google."
     if not verify_password(password or "", user.get("password_hash", "")):
-        return None, "Mật khẩu không đúng."
+        return None, "Email hoặc mật khẩu không đúng."
 
     update_last_login(user["id"])
     refreshed = get_user_by_email(normalized_email)

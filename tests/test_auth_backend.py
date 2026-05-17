@@ -87,7 +87,7 @@ class TestAuth:
         user, error = auth.login_user("login@example.com", "wrong123")
 
         assert user is None
-        assert error == "Mật khẩu không đúng."
+        assert error == "Email hoặc mật khẩu không đúng."
 
     def test_login_user_returns_user_for_correct_password(self, auth_modules):
         _, auth, _ = auth_modules
@@ -204,3 +204,41 @@ class TestGoogleEmailVerified:
         user = auth.handle_google_callback("good-code")
         assert user is not None
         assert user["email"] == "verified@example.com"
+
+
+class TestLoginErrorMessages:
+    def test_login_wrong_email_returns_generic_error(self, auth_modules):
+        _, auth, _ = auth_modules
+        _, error = auth.login_user("nonexistent@example.com", "any-password")
+        assert error == "Email hoặc mật khẩu không đúng."
+
+    def test_login_wrong_password_returns_generic_error(self, auth_modules):
+        _, auth, _ = auth_modules
+        auth.register_user("generic@example.com", "User", "correct1234")
+        _, error = auth.login_user("generic@example.com", "wrong123")
+        assert error == "Email hoặc mật khẩu không đúng."
+
+    def test_login_google_account_still_returns_specific_error(self, auth_modules):
+        auth_db, auth, _ = auth_modules
+        auth_db.create_user(
+            email="guser@example.com",
+            display_name="Google User",
+            auth_provider="google",
+            password_hash="",
+        )
+        _, error = auth.login_user("guser@example.com", "any")
+        assert "Google" in error
+
+
+class TestPasswordMinLength:
+    def test_register_rejects_7_char_password(self, auth_modules):
+        _, auth, _ = auth_modules
+        _, error = auth.register_user("short@example.com", "User", "1234567")
+        assert error is not None
+        assert "8" in error
+
+    def test_register_accepts_8_char_password(self, auth_modules):
+        _, auth, _ = auth_modules
+        user, error = auth.register_user("ok8@example.com", "User", "12345678")
+        assert error is None
+        assert user is not None
