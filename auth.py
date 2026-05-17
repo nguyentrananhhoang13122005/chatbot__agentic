@@ -73,6 +73,7 @@ def get_google_user_info(access_token: str) -> dict:
     payload = response.json()
     return {
         "email": payload.get("email", ""),
+        "email_verified": payload.get("email_verified", False),
         "name": payload.get("name", ""),
         "picture": payload.get("picture", ""),
     }
@@ -145,6 +146,8 @@ def handle_google_callback(code: str) -> dict | None:
         if not access_token:
             return None
         info = get_google_user_info(access_token)
+        if not info.get("email_verified", False):
+            return None
         email = normalize_email(info.get("email", ""))
         if not email:
             return None

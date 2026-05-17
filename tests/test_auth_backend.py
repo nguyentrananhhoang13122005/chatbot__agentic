@@ -174,3 +174,33 @@ class TestOAuthState:
         _, auth, _ = auth_modules
         url = auth.get_google_auth_url()
         assert "state=" not in url
+
+
+class TestGoogleEmailVerified:
+    def test_handle_google_callback_rejects_unverified_email(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+
+        monkeypatch.setattr(auth, "exchange_code_for_token", lambda _code: "fake-token")
+        monkeypatch.setattr(auth, "get_google_user_info", lambda _token: {
+            "email": "unverified@example.com",
+            "email_verified": False,
+            "name": "Unverified",
+            "picture": "",
+        })
+
+        assert auth.handle_google_callback("good-code") is None
+
+    def test_handle_google_callback_accepts_verified_email(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+
+        monkeypatch.setattr(auth, "exchange_code_for_token", lambda _code: "fake-token")
+        monkeypatch.setattr(auth, "get_google_user_info", lambda _token: {
+            "email": "verified@example.com",
+            "email_verified": True,
+            "name": "Verified User",
+            "picture": "https://example.com/pic.png",
+        })
+
+        user = auth.handle_google_callback("good-code")
+        assert user is not None
+        assert user["email"] == "verified@example.com"
