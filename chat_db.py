@@ -92,8 +92,9 @@ def save_session(session_id: str, messages: list, title: str | None = None, user
         ON CONFLICT(id) DO UPDATE SET
             title      = excluded.title,
             messages   = excluded.messages,
-            user_id    = excluded.user_id,
             updated_at = excluded.updated_at
+        WHERE chat_sessions.user_id = excluded.user_id
+              OR (chat_sessions.user_id IS NULL AND excluded.user_id IS NULL)
     """, (session_id, auto_title, messages_json, user_id, now, now))
     conn.commit()
     conn.close()

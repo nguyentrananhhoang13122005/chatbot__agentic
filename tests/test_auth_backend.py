@@ -242,3 +242,16 @@ class TestPasswordMinLength:
         user, error = auth.register_user("ok8@example.com", "User", "12345678")
         assert error is None
         assert user is not None
+
+
+class TestSaveSessionOwnerSafety:
+    def test_save_session_cannot_steal_ownership(self, auth_modules):
+        _, _, chat_db = auth_modules
+        chat_db.save_session("steal-test", [{"role": "user", "content": "mine"}], user_id="owner-a")
+
+        chat_db.save_session("steal-test", [{"role": "user", "content": "stolen"}], user_id="attacker")
+
+        msgs = chat_db.load_session_for_user("steal-test", "owner-a")
+        assert len(msgs) > 0
+        assert msgs[0]["content"] == "mine"
+        assert chat_db.load_session_for_user("steal-test", "attacker") == []
