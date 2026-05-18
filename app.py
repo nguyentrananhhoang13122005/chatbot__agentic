@@ -246,8 +246,7 @@ def load_custom_css():
     }
 
     /* STREAMLIT NATIVE CONTROLS PRESERVED & CUSTOMIZED */
-    .block-container { padding-top:4rem!important; padding-bottom:6rem!important; max-width:100vw!important; }
-
+    .block-container { padding-top:4rem!important; padding-bottom:8rem!important; max-width:100vw!important; }
     /* Fix Material Icons Globally (prevents raw text like keyboard_double_arrow_right) */
     span.material-symbols-rounded, 
     span[data-testid="stIconMaterial"],
@@ -2011,14 +2010,14 @@ def render_chat_page():
         user = st.session_state.get("user")
         if user and st.session_state.messages:
             save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
+        st.rerun()
 
     # === CUSTOM CHAT INPUT BAR: text_input + mic + send button in one row ===
     if "input_key_counter" not in st.session_state:
         st.session_state.input_key_counter = 0
 
     with st.container():
-        st.markdown('<div class="custom-chat-bar">', unsafe_allow_html=True)
-        col_input, col_mic, col_send = st.columns([20, 1, 2])
+        col_input, col_mic, col_send = st.columns([12, 1, 1], vertical_alignment="bottom")
         with col_input:
             text_input = st.text_input(
                 "chat_input",
@@ -2036,8 +2035,8 @@ def render_chat_page():
                 key='STT'
             )
         with col_send:
+            st.markdown('<span id="chat-bar-anchor"></span>', unsafe_allow_html=True)
             send_clicked = st.button("↑", key="send_btn", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # Determine final query: voice > button click > Enter key
     final_query = None
@@ -2068,7 +2067,7 @@ def render_chat_page():
         user = st.session_state.get("user")
         if user and st.session_state.messages:
             save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
-            st.rerun()
+        st.rerun()
 
 
 # === RENDER ===
