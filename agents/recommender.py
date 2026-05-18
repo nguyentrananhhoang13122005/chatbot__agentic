@@ -467,11 +467,16 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if not best_match:
                 print(f"DEBUG [Recommender]: No valid DATS content for '{s}' in years {year_priority}")
 
-        # --- Helper: Smart content extraction ---
+        # --- Helper: Smart Hybrid Chunker ---
         def _extract_content_for_llm(content: str, query_lc: str) -> str:
-            """Trích xuất phần nội dung liên quan từ DATS content dài."""
+            """
+            Trích xuất phần nội dung liên quan từ DATS content dài bằng kỹ thuật Hybrid Chunking:
+            Tầng 1: Structural Chunking (Cắt theo Header/Tiêu đề)
+            Tầng 2: Recursive Character Splitter (Cắt theo đoạn văn, câu) để làm fallback
+            """
             if len(content) <= 8000:
                 return content
+            
             search_keywords = []
             kw_extract_map = {
                 'vị trí': ['địa chỉ', 'cơ sở', 'khu', 'trụ sở', 'vị trí', 'phân hiệu'],
@@ -486,23 +491,78 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             for kw, patterns in kw_extract_map.items():
                 if kw in query_lc:
                     search_keywords.extend(patterns)
-            if search_keywords:
-                content_lower = content.lower()
-                best_pos = -1
-                for sk in search_keywords:
-                    pos = content_lower.find(sk)
-                    if pos >= 0 and (best_pos < 0 or pos < best_pos):
-                        best_pos = pos
-                if best_pos >= 0:
-                    intro = content[:1500]
-                    # Bỏ qua các match ở phần Mục lục (thường nằm ở < 5000 ký tự đầu)
-                    # Nếu best_pos ở quá sớm, mở rộng window
-                    start = max(0, best_pos - 500)
-                    end = min(len(content), best_pos + 15000)
-                    relevant_section = content[start:end]
-                    print(f"DEBUG [Recommender]: Extracted relevant section around '{search_keywords[0]}' (pos={best_pos})")
-                    return intro + "\n\n[...]\n\n" + relevant_section
-            return content[:8000]
+            
+            if not search_keywords:
+                return content[:8000]
+
+            content_lower = content.lower()
+            best_pos = -1
+            found_kw = ""
+            for sk in search_keywords:
+                pos = content_lower.find(sk)
+                # Bỏ qua các match quá sớm (thường là ở Mục lục)
+                if pos > 1000 and (best_pos < 0 or pos < best_pos):
+                    best_pos = pos
+                    found_kw = sk
+
+            if best_pos < 0:
+                 return content[:8000]
+
+            print(f"DEBUG [Recommender]: Found keyword '{found_kw}' at pos={best_pos}")
+
+            # --- Tầng 1: Structural Split (Chia theo Header) ---
+            # Bắt các pattern như: "1.", "I.", "PHẦN I", "Điều 1."
+            # Vì text OCR có thể bị dính nhau, ta chia section dựa vào newline và pattern
+            import re
+            header_pattern = re.compile(r'\n\s*(?:[IVXLCDM]+|[0-9]+)\s*[\.\:\)]\s*[A-ZĐ]', re.MULTILINE)
+            headers = [(m.start(), m.end()) for m in header_pattern.finditer(content)]
+            
+            chunk_start = 0
+            chunk_end = len(content)
+            
+            if headers:
+                # Tìm header ngay trước best_pos
+                for i, (h_start, h_end) in enumerate(headers):
+                    if h_start <= best_pos:
+                        chunk_start = h_start
+                        if i + 1 < len(headers):
+                            chunk_end = headers[i+1][0]
+                        else:
+                            chunk_end = len(content)
+                
+            # --- Tầng 2: Recursive Character Fallback ---
+            # Nếu chunk tìm được quá to (> 10000) HOẶC không tìm thấy header,
+            # Fallback: Cắt xung quanh best_pos nhưng NGHIÊM NGẶT dựa trên dấu câu
+            chunk_length = chunk_end - chunk_start
+            if not headers or chunk_length > 10000:
+                print(f"DEBUG [Recommender]: Structural Chunking failed or chunk too large ({chunk_length} chars). Fallback to Recursive Split.")
+                # Lấy một window rộng (khoảng 8000 chars) xung quanh từ khóa
+                raw_start = max(0, best_pos - 1000)
+                raw_end = min(len(content), best_pos + 7000)
+                
+                # Tinh chỉnh raw_start bằng cách tìm \n\n, \n, hoặc dấu chấm (.) gần đó
+                safe_start = content.rfind('\n\n', 0, raw_start)
+                if safe_start == -1: safe_start = content.rfind('\n', 0, raw_start)
+                if safe_start == -1: safe_start = content.rfind('.', 0, raw_start) + 1
+                if safe_start < 0: safe_start = raw_start
+                
+                # Tinh chỉnh raw_end tương tự
+                safe_end = content.find('\n\n', raw_end)
+                if safe_end == -1: safe_end = content.find('\n', raw_end)
+                if safe_end == -1: safe_end = content.find('.', raw_end) + 1
+                if safe_end <= 0: safe_end = raw_end
+                
+                chunk_start = safe_start
+                chunk_end = safe_end
+
+            relevant_section = content[chunk_start:chunk_end].strip()
+            
+            intro = content[:1500]
+            # Tránh trùng lặp nếu section đã bao gồm cả intro
+            if chunk_start < 1500:
+                return relevant_section
+                
+            return intro + "\n\n[...]\n\n" + relevant_section
 
         if best_match:
             search_year, school_found, content_found = best_match
