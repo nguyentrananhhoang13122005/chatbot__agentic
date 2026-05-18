@@ -149,7 +149,9 @@ def _process_query(query: str, uploaded_cv=None):
     thinking_ui = st.empty()
     thinking_ui.markdown("""
         <div class="skeleton-container">
-            <div class="skeleton-avatar">🤖</div>
+            <div class="skeleton-avatar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+            </div>
             <div class="skeleton-msg">
                 <div class="skeleton-line" style="width: 90%;"></div>
                 <div class="skeleton-line" style="width: 75%;"></div>
@@ -1966,7 +1968,7 @@ def render_chat_page():
 
 
     if len(st.session_state.messages) == 0 and "pending_query" not in st.session_state:
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant", avatar="assistant"):
             st.write("Chào bạn! 👋 Mình là trợ lý tuyển sinh AI. Bạn muốn tìm hiểu về trường nào, ngành nào, hay so sánh điểm chuẩn hôm nay?")
             st.write("")
             c1, c2, c3, c4 = st.columns(4)
@@ -1985,7 +1987,7 @@ def render_chat_page():
 
     # Hiển thị lịch sử hội thoại
     for i, msg in enumerate(st.session_state.messages):
-        with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
+        with st.chat_message(msg["role"], avatar="assistant" if msg["role"] == "assistant" else "user"):
             st.write(msg["content"])
             if msg["role"] == "assistant":
                 if st.button("🔊 Nghe", key=f"tts_{i}"):
@@ -1999,9 +2001,9 @@ def render_chat_page():
         pending = st.session_state.pending_query
         del st.session_state.pending_query
         st.session_state.messages.append({"role": "user", "content": pending})
-        with st.chat_message("user", avatar="👤"):
+        with st.chat_message("user", avatar="user"):
             st.write(pending)
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant", avatar="assistant"):
             response = _process_query(pending, uploaded_cv)
         if response:
             st.session_state.messages.append({"role": "assistant", "content": str(response)})
@@ -2056,9 +2058,9 @@ def render_chat_page():
         query = st.session_state.pending_chat_query
         del st.session_state.pending_chat_query
         st.session_state.messages.append({"role": "user", "content": query})
-        with st.chat_message("user", avatar="👤"):
+        with st.chat_message("user", avatar="user"):
             st.write(query)
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant", avatar="assistant"):
             response = _process_query(query, uploaded_cv)
         if response:
             st.session_state.messages.append({"role": "assistant", "content": str(response)})

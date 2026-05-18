@@ -361,7 +361,7 @@ YÊU CẦU TRẢ LỜI:
 3. **LỜI KHUYÊN** - 2-3 bước cụ thể cần làm.
 4. **GỢI Ý CÂU HỎI** - 2-3 câu hỏi liên quan để hỏi tiếp.
 
-Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đầu bằng 🤖 **[Counselor Agent]**.
+Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đầu bằng**[Counselor Agent]**.
 """
     return system_prompt
 
@@ -413,7 +413,7 @@ def tu_van_cv(cv_file, user_query: str, stream_output: bool = False) -> str:
     )
     if answer:
         return answer
-    return f"🤖 **[Counselor Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
+    return f"**[Counselor Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
 
 
 def tu_van_cv_stream(cv_file, user_query: str):

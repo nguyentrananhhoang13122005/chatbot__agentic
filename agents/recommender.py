@@ -297,7 +297,7 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
         if len(all_matches) > 1:
             school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
             return (
-                f"🤖 **[Recommender Agent]**\n\n"
+                f"**[Recommender Agent]**\n\n"
                 f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
                 f"{school_list_str}\n\n"
                 f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
@@ -387,7 +387,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời."""
 
             llm_messages_cross = [{"role": "user", "content": llm_prompt_cross}]
-            prefix_cross = f"🤖 **[Recommender Agent]** — Tìm kiếm chéo: **{tu_khoa}** · {vf_cross['Trường'].nunique()} trường\n\n"
+            prefix_cross = f"**[Recommender Agent]** — Tìm kiếm chéo: **{tu_khoa}** · {vf_cross['Trường'].nunique()} trường\n\n"
             suffix_cross = f"\n\n---\n*Dữ liệu chính thức{f' năm {data_year_val}' if data_year_val else ''}, đã kiểm chứng chính xác.*"
 
             print(f"DEBUG [Recommender]: Cross-school search for '{tu_khoa}' → {len(vf_cross)} rows, {vf_cross['Trường'].nunique()} schools")
@@ -564,7 +564,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 8. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
 9. KHÔNG hiển thị cột trống.
 10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ liên quan đến trường {school_found} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
-                dats_prefix = f"🤖 **[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
+                dats_prefix = f"**[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
                 if fell_back:
                     dats_prefix += f"{fallback_note}\n\n"
                 dats_messages = [{"role": "user", "content": llm_prompt_dats}]
@@ -602,7 +602,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             other_info = "\n".join([f"  - **Năm {y}**: {s}" for y, s in available_years])
             first_year, first_school = available_years[0]
             return (
-                f"🤖 **[Recommender Agent]**\n\n"
+                f"**[Recommender Agent]**\n\n"
                 f"⚠️ **Trường \"{truong}\" chưa có dữ liệu tuyển sinh năm {target_year}** trong hệ thống.\n\n"
                 f"Tuy nhiên, tôi tìm thấy dữ liệu của trường này ở các năm khác:\n\n"
                 f"{other_info}\n\n"
@@ -739,7 +739,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 if stream_output:
                     return _build_structured_response(
                         dataframe=data_sample[export_cols],
-                        prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
+                        prefix=f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
                         messages=llm_messages,
                         temperature=0.1,
                         max_tokens=3000,
@@ -756,7 +756,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     print("DEBUG [Recommender]: LLM OK")
 
                 if llm_answer:
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{year_fallback_note}{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{year_fallback_note}{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
 
                 # === SMART FALLBACK: Không dùng LLM, phân tích bằng Pandas ===
                 print("DEBUG [Recommender]: All LLM models failed, using smart fallback")
@@ -766,7 +766,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 # Nếu người dùng hỏi "chỉ tiêu" nhưng dữ liệu chỉ có "điểm chuẩn"
                 if 'chỉ tiêu' in query_lower and 'Chỉ tiêu' not in vf_match.columns:
                     return (
-                        f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                        f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
                         f"{ai_warning}"
                         f"Rất tiếc, dữ liệu hiện tại của trường này chỉ lưu trữ thông tin về **điểm chuẩn** và **phương thức xét tuyển**, chưa có thông tin về **chỉ tiêu**.\n\n"
                         f"👉 Bạn có thể hỏi tôi về điểm chuẩn của các ngành thay thế nhé!"
@@ -782,7 +782,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     table = "| Phương thức | Số ngành | Điểm thấp nhất | Điểm cao nhất |\n|---|---|---|---|\n"
                     for _, r in methods.iterrows():
                         table += f"| **{r['Phương thức xét tuyển']}** | {r['Số_ngành']} | {r['Điểm_thấp']} | {r['Điểm_cao']} |\n"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Các phương thức xét tuyển\n\n{table}"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Các phương thức xét tuyển\n\n{table}"
 
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
@@ -791,13 +791,13 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     for _, r in sorted_df.iterrows():
                         table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"
                     label = "thấp nhất" if 'thấp' in query_lower else "cao nhất"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
 
                 # Fallback cuối: tóm tắt thống kê
                 total = vf_match['Tên ngành'].nunique()
                 methods_list = ", ".join(vf_match['Phương thức xét tuyển'].unique().tolist())
                 return (
-                    f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                    f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
                     f"{ai_warning}"
                     f"Trường có **{total} ngành** tuyển sinh theo phương thức: {methods_list}.\n\n"
                     f"👉 Hãy hỏi cụ thể hơn để tôi cung cấp thông tin chính xác!\n"
@@ -825,7 +825,7 @@ QUY TẮC TRẢ LỜI:
 5. Ở cuối, đề xuất 2-3 câu hỏi về điểm chuẩn, ngành học MÀ HỆ THỐNG CÓ DỮ LIỆU."""
 
         general_prefix = (
-            f"🤖 **[Recommender Agent]** — Trường: **{truong}**\n\n"
+            f"**[Recommender Agent]** — Trường: **{truong}**\n\n"
         )
         general_suffix = (
             f"\n\n---\n"
@@ -918,7 +918,7 @@ QUY TẮC TRẢ LỜI:
             msg = f"Xin lỗi, hiện tại hệ thống chưa có dữ liệu của trường **{truong}**."
         else:
             msg = f"Xin lỗi, không tìm thấy dữ liệu nào phù hợp với yêu cầu của bạn."
-        return f"🤖 **[Recommender Agent]**\n\n{msg}\n\n👉 Vui lòng kiểm tra lại từ khóa hoặc thử một câu hỏi khác nhé!"
+        return f"**[Recommender Agent]**\n\n{msg}\n\n👉 Vui lòng kiểm tra lại từ khóa hoặc thử một câu hỏi khác nhé!"
 
     context_data = clean_ocr_for_llm(filtered_df)
 
@@ -956,7 +956,7 @@ DỮ LIỆU:
 
     if stream_output:
         return _stream_llm_response(
-            prefix="🤖 **[Recommender Agent]**\n\n",
+            prefix="**[Recommender Agent]**\n\n",
             messages=[{"role": "user", "content": answer_prompt}],
             temperature=0.1,
         )
@@ -967,8 +967,8 @@ DỮ LIỆU:
         temperature=0.1,
     )
     if answer_res:
-        return f"🤖 **[Recommender Agent]**\n\n{answer_res}"
-    return f"🤖 **[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
+        return f"**[Recommender Agent]**\n\n{answer_res}"
+    return f"**[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
 
 
 def query_diem_chuan_stream(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_location: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0):
