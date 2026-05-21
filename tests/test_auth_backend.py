@@ -254,4 +254,94 @@ class TestSaveSessionOwnerSafety:
         msgs = chat_db.load_session_for_user("steal-test", "owner-a")
         assert len(msgs) > 0
         assert msgs[0]["content"] == "mine"
+        assert chat_db.load_session_for_user("steal-test", "owner-a") == msgs
         assert chat_db.load_session_for_user("steal-test", "attacker") == []
+
+class TestOAuthStateStore:
+    def test_store_and_consume_state(self, auth_modules):
+        _, auth, _ = auth_modules
+        auth._store_oauth_state("test-state-123")
+        assert auth._consume_oauth_state("test-state-123") is True
+        assert auth._consume_oauth_state("test-state-123") is False
+
+    def test_consume_expired_state(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+        auth._store_oauth_state("expired-state")
+        import time
+        orig_time = time.time
+        monkeypatch.setattr(time, "time", lambda: orig_time() + 601)
+        assert auth._consume_oauth_state("expired-state") is False
+
+class TestGoogleAPI:
+    def test_exchange_code_for_token_success(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+        class MockResponse:
+            def raise_for_status(self): pass
+            def json(self): return {"access_token": "mock-access-token"}
+        monkeypatch.setattr(auth.requests, "post", lambda *args, **kwargs: MockResponse())
+        token = auth.exchange_code_for_token("valid-code")
+        assert token == "mock-access-token"
+
+    def test_get_google_user_info_success(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+        class MockResponse:
+            def raise_for_status(self): pass
+            def json(self): return {"email": "test@google.com", "email_verified": True, "name": "Test User", "picture": "pic.png"}
+        monkeypatch.setattr(auth.requests, "get", lambda *args, **kwargs: MockResponse())
+        info = auth.get_google_user_info("token")
+        assert info["email"] == "test@google.com"
+        assert info["email_verified"] is True
+        assert info["name"] == "Test User"
+        assert info["picture"] == "pic.png"
+
+class TestStreamlitContext:
+    def test_streamlit_session_state(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+        class MockSessionState(dict): pass
+        mock_state = MockSessionState()
+        mock_state["user"] = {"email": "test@local.com"}
+        monkeypatch.setattr(auth.st, "session_state", mock_state)
+        
+        assert auth.get_current_user() == {"email": "test@local.com"}
+        assert auth.is_logged_in() is True
+        
+        auth.logout()
+        assert auth.get_current_user() is None
+        assert auth.is_logged_in() is False
+
+class TestAuthEdgeCases:
+    def test_sanitize_user_none(self, auth_modules):
+        _, auth, _ = auth_modules
+        assert auth._sanitize_user(None) is None
+
+    def test_verify_password_empty(self, auth_modules):
+        _, auth, _ = auth_modules
+        assert auth.verify_password("", "hashed") is False
+        assert auth.verify_password("plain", "") is False
+
+    def test_register_invalid_email(self, auth_modules):
+        _, auth, _ = auth_modules
+        user, error = auth.register_user("invalid-email", "Name", "password123")
+        assert user is None
+        assert error == "Email không hợp lệ."
+
+    def test_register_empty_name(self, auth_modules):
+        _, auth, _ = auth_modules
+        user, error = auth.register_user("test@example.com", "   ", "password123")
+        assert user is None
+        assert error == "Vui lòng nhập họ và tên."
+
+    def test_handle_google_callback_key_error(self, auth_modules, monkeypatch):
+        _, auth, _ = auth_modules
+        monkeypatch.setattr(auth, "exchange_code_for_token", lambda c: "token")
+        monkeypatch.setattr(auth, "get_google_user_info", lambda t: {"wrong_key": "val"})
+        assert auth.handle_google_callback("code") is None
+
+    def test_handle_google_callback_no_code(self, auth_modules):
+        _, auth, _ = auth_modules
+        assert auth.handle_google_callback(None) is None
+        assert auth.handle_google_callback("") is None
+
+    def test_verify_password_invalid_hash(self, auth_modules):
+        _, auth, _ = auth_modules
+        assert auth.verify_password("plain", "invalid-hash-format") is False
