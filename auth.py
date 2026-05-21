@@ -1,6 +1,8 @@
 import os
 import re
 from urllib.parse import urlencode
+import time
+import streamlit as st
 
 import requests
 from dotenv import load_dotenv
@@ -8,6 +10,32 @@ from dotenv import load_dotenv
 from auth_db import get_user_by_email, init_auth_db, create_user, update_last_login, upsert_google_user, normalize_email
 
 load_dotenv(override=True)
+
+# ── Module-level OAuth state store ──────────────────────────────
+# st.session_state is tied to the WebSocket; when the browser
+# navigates away (Google OAuth redirect) the socket disconnects
+# and the session may be lost.  A module-level dict survives
+# across Streamlit sessions inside the same server process.
+_OAUTH_TTL = 600                        # 10 minutes
+
+@st.cache_resource
+def _get_oauth_store() -> dict:
+    """Shared dict that survives Streamlit reruns."""
+    return {}
+
+def _store_oauth_state(state: str):
+    store = _get_oauth_store()
+    store[state] = time.time()
+    cutoff = time.time() - _OAUTH_TTL
+    for k in [k for k, v in store.items() if v < cutoff]:
+        store.pop(k, None)
+
+def _consume_oauth_state(state: str) -> bool:
+    store = _get_oauth_store()
+    if state and state in store:
+        ts = store.pop(state)
+        return (time.time() - ts) < _OAUTH_TTL
+    return False
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
