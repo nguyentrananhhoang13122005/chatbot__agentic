@@ -89,7 +89,7 @@ if st.session_state.get("auth_toast"):
 
 
 from ui.styles import load_custom_css
-from ui.components import render_sidebar, render_home_page, render_chat_page, login_dialog
+from ui.components import render_sidebar, render_home_page, render_chat_page, render_score_analysis_page, login_dialog
 load_custom_css()
 api_key_valid, api_key_error = _cached_validate_api_key_v2()
 if not api_key_valid:
@@ -97,6 +97,8 @@ if not api_key_valid:
 render_sidebar()
 if st.session_state.page == "home":
     render_home_page()
+elif st.session_state.page == "score_analysis":
+    render_score_analysis_page()
 else:
     render_chat_page()
 if not st.session_state.get("user"):

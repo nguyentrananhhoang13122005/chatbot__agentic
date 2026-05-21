@@ -350,11 +350,421 @@ def render_home_page():
         """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    _, cc, _ = st.columns([1.2, 1, 1.2])
-    with cc:
-        if st.button("Bắt đầu trò chuyện", use_container_width=True, type="primary"):
+    _, c_chat, c_score, _ = st.columns([0.8, 1, 1, 0.8])
+    with c_chat:
+        if st.button("💬 Bắt đầu trò chuyện", use_container_width=True, type="primary"):
             st.session_state.page = "chat"
             st.rerun()
+    with c_score:
+        if st.button("📊 Phân tích Học bạ", use_container_width=True, type="secondary"):
+            st.session_state.page = "score_analysis"
+            st.rerun()
+
+
+# === SCORE ANALYSIS PAGE ===
+def render_score_analysis_page():
+    from utils.score_calculator import (
+        MAIN_SUBJECTS, normalize_scores, get_top_k_combinations,
+        get_strength_analysis, format_combination_display, MIN_THRESHOLD,
+    )
+    from agents.match_maker import find_top_k_schools, generate_analysis_stream
+    from agents.counselor import doc_file, parse_scores_to_json
+
+    # --- Init session state ---
+    if "sa_step" not in st.session_state:
+        st.session_state.sa_step = 1
+    if "sa_scores" not in st.session_state:
+        st.session_state.sa_scores = {}
+    if "sa_result" not in st.session_state:
+        st.session_state.sa_result = None
+
+    # --- Header ---
+    col_back, col_title = st.columns([0.15, 0.85])
+    with col_back:
+        if st.button("← Trang chủ", key="sa_back_home"):
+            st.session_state.page = "home"
+            st.session_state.sa_step = 1
+            st.rerun()
+    with col_title:
+        st.markdown("## 📊 Phân tích Học bạ & Gợi ý Trường")
+
+    # --- Step Wizard Bar ---
+    step = st.session_state.sa_step
+    steps = ["① Nhập điểm", "② Phương thức", "③ Kết quả AI"]
+    step_cols = st.columns(3)
+    for i, (sc, label) in enumerate(zip(step_cols, steps)):
+        with sc:
+            if i + 1 < step:
+                st.success(f"✅ {label}")
+            elif i + 1 == step:
+                st.info(f"👉 {label}")
+            else:
+                st.markdown(f"⬜ {label}")
+
+    st.divider()
+
+    # ========== STEP 1: NHẬP ĐIỂM ==========
+    if step == 1:
+        st.markdown("### 📝 Nhập điểm từng môn")
+
+        # --- OCR Upload ---
+        with st.expander("📸 Tải ảnh Học bạ để AI tự nhận diện (tùy chọn)", expanded=False):
+            uploaded_file = st.file_uploader(
+                "Chọn ảnh hoặc PDF học bạ:",
+                type=["jpg", "jpeg", "png", "pdf"],
+                key="sa_file_upload"
+            )
+            if uploaded_file and st.button("🔍 AI Quét tự động", key="sa_ocr_btn", type="primary"):
+                with st.spinner("⏳ Đang quét ảnh bằng AI..."):
+                    raw_ocr = doc_file(uploaded_file)
+                    if raw_ocr and not raw_ocr.startswith("[LOI"):
+                        parsed = parse_scores_to_json(raw_ocr)
+                        if parsed:
+                            st.session_state.sa_scores = parsed
+                            st.success(f"✅ AI đã nhận diện được {len(parsed)} môn! Kiểm tra và chỉnh sửa bên dưới.")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ AI không trích xuất được điểm. Vui lòng nhập thủ công.")
+                    else:
+                        st.error("❌ Không đọc được file. Vui lòng thử lại hoặc nhập thủ công.")
+
+        st.markdown("---")
+        st.markdown("**Nhập điểm thủ công** *(thang 10)*")
+
+        # --- Score Input Form ---
+        existing = st.session_state.sa_scores
+        input_scores = {}
+
+        col_left, col_right = st.columns(2)
+        for i, subj in enumerate(MAIN_SUBJECTS):
+            default_val = existing.get(subj, 0.0)
+            target_col = col_left if i < 5 else col_right
+            with target_col:
+                val = st.number_input(
+                    subj,
+                    min_value=0.0,
+                    max_value=10.0,
+                    value=float(default_val),
+                    step=0.1,
+                    format="%.1f",
+                    key=f"sa_input_{subj}",
+                )
+                input_scores[subj] = val
+
+        # --- Ngoại ngữ phụ (tùy chọn) ---
+        from utils.score_calculator import EXTRA_LANGUAGES
+        with st.expander("🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*"):
+            st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
+            lang_col1, lang_col2 = st.columns(2)
+            for j, lang in enumerate(EXTRA_LANGUAGES):
+                default_lang = existing.get(lang, 0.0)
+                target_lang_col = lang_col1 if j < 3 else lang_col2
+                with target_lang_col:
+                    lang_val = st.number_input(
+                        lang,
+                        min_value=0.0,
+                        max_value=10.0,
+                        value=float(default_lang),
+                        step=0.1,
+                        format="%.1f",
+                        key=f"sa_input_{lang}",
+                    )
+                    if lang_val > 0:
+                        input_scores[lang] = lang_val
+
+        # --- Năng khiếu (tùy chọn) ---
+        from utils.score_calculator import EXTRA_APTITUDE
+        with st.expander("🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*"):
+            st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
+            apt_col1, apt_col2 = st.columns(2)
+            for j, apt in enumerate(EXTRA_APTITUDE):
+                default_apt = existing.get(apt, 0.0)
+                target_apt_col = apt_col1 if j % 2 == 0 else apt_col2
+                with target_apt_col:
+                    apt_val = st.number_input(
+                        apt,
+                        min_value=0.0,
+                        max_value=10.0,
+                        value=float(default_apt),
+                        step=0.1,
+                        format="%.1f",
+                        key=f"sa_input_{apt}",
+                    )
+                    if apt_val > 0:
+                        input_scores[apt] = apt_val
+
+        st.markdown("---")
+
+        # --- Điểm ưu tiên (MAJOR #2: Tách KV + ĐT theo Quy chế 2026) ---
+        from utils.score_calculator import PRIORITY_KV, PRIORITY_UT, calculate_total_raw_bonus
+
+        st.markdown("**Điểm ưu tiên** *(theo Quy chế 2026 — Bộ GD&ĐT)*")
+        kv_col, ut_col = st.columns(2)
+        with kv_col:
+            kv_options = list(PRIORITY_KV.keys())
+            kv_labels = [
+                f"KV1 — Miền núi, hải đảo (+0.75đ)",
+                f"KV2-NT — Nông thôn (+0.50đ)",
+                f"KV2 — Thị xã, TP thuộc tỉnh (+0.25đ)",
+                f"KV3 — TP trực thuộc TW (+0đ)",
+            ]
+            kv_idx = st.selectbox(
+                "Khu vực ưu tiên:",
+                options=range(len(kv_options)),
+                format_func=lambda i: kv_labels[i],
+                index=3,  # Default: KV3
+                key="sa_kv",
+            )
+            selected_kv = kv_options[kv_idx]
+
+        with ut_col:
+            ut_options = list(PRIORITY_UT.keys())
+            ut_labels = [
+                f"Không thuộc diện ưu tiên (+0đ)",
+                f"UT2 — Con thương binh, liệt sĩ... (+1.0đ)",
+                f"UT1 — DTTS vùng KT-XH khó khăn (+2.0đ)",
+            ]
+            ut_idx = st.selectbox(
+                "Đối tượng ưu tiên:",
+                options=range(len(ut_options)),
+                format_func=lambda i: ut_labels[i],
+                index=0,  # Default: Không
+                key="sa_ut",
+            )
+            selected_ut = ut_options[ut_idx]
+
+        raw_bonus = calculate_total_raw_bonus(selected_kv, selected_ut)
+        if raw_bonus > 0:
+            st.info(
+                f"📌 Tổng điểm ưu tiên gốc: **+{raw_bonus}đ** "
+                f"(KV: +{PRIORITY_KV[selected_kv]}đ + ĐT: +{PRIORITY_UT[selected_ut]}đ). "
+                f"*Lưu ý: Điểm ưu tiên sẽ giảm dần khi tổng 3 môn ≥ 22.5 theo quy chế.*"
+            )
+
+        # --- Nút tiếp tục ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("Tiếp tục →", key="sa_next_1", type="primary", use_container_width=True):
+            # Lọc chỉ giữ môn có điểm > 0
+            filled = {k: v for k, v in input_scores.items() if v > 0}
+            if len(filled) < 3:
+                st.error("❌ Vui lòng nhập ít nhất 3 môn để tính tổ hợp khối thi.")
+            else:
+                st.session_state.sa_scores = filled
+                st.session_state.sa_bonus_val = raw_bonus
+                st.session_state.sa_kv_selected = selected_kv
+                st.session_state.sa_ut_selected = selected_ut
+                st.session_state.sa_step = 2
+                st.rerun()
+
+    # ========== STEP 2: CHỌN PHƯƠNG THỨC ==========
+    elif step == 2:
+        st.markdown("### 🎯 Chọn phương thức xét tuyển")
+
+        scores = normalize_scores(st.session_state.sa_scores)
+
+        # Preview tổ hợp mạnh nhất
+        bonus = st.session_state.get("sa_bonus_val", 0.0)
+        top3 = get_top_k_combinations(scores, k=3, bonus=bonus)
+        if top3:
+            st.markdown("**Top 3 tổ hợp mạnh nhất của bạn:**")
+            preview_cols = st.columns(3)
+            for i, combo in enumerate(top3[:3]):
+                with preview_cols[i]:
+                    is_below = combo.get("below_threshold", False)
+                    emoji = "⚠️" if is_below else "🏆"
+                    st.metric(
+                        label=f"{emoji} {combo['code']}",
+                        value=f"{combo['total']} điểm",
+                        delta=f"{'Dưới ngưỡng 15!' if is_below else ' + '.join(combo['subjects'])}",
+                        delta_color="inverse" if is_below else "off",
+                    )
+
+        st.divider()
+
+        methods = st.multiselect(
+            "Chọn phương thức xét tuyển:",
+            options=[
+                "Xét điểm Học bạ THPT",
+                "Xét điểm thi THPT",
+            ],
+            default=["Xét điểm Học bạ THPT", "Xét điểm thi THPT"],
+            key="sa_methods",
+        )
+
+        # Cảnh báo quy chế 2026
+        st.warning(
+            "⚠️ **Lưu ý Quy chế 2026:** Từ năm 2026, không xét riêng học bạ. "
+            "Dữ liệu điểm chuẩn Học bạ từ 2025 trở về trước chỉ mang tính tham khảo."
+        )
+
+        top_k = st.selectbox(
+            "Số trường gợi ý (Top K):",
+            options=[3, 5, 10, 15],
+            index=1,
+            key="sa_top_k",
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_back2, col_next2 = st.columns(2)
+        with col_back2:
+            if st.button("← Quay lại", key="sa_back_2", use_container_width=True):
+                st.session_state.sa_step = 1
+                st.rerun()
+        with col_next2:
+            if st.button("🚀 Phân tích ngay!", key="sa_analyze", type="primary", use_container_width=True):
+                if not methods:
+                    st.error("Vui lòng chọn ít nhất 1 phương thức xét tuyển.")
+                else:
+                    with st.spinner("⏳ Đang quét 20,000+ dòng dữ liệu điểm chuẩn..."):
+                        result = find_top_k_schools(
+                            student_scores=st.session_state.sa_scores,
+                            methods=methods,
+                            k=top_k,
+                            bonus=bonus,
+                        )
+                        st.session_state.sa_result = result
+                        st.session_state.sa_step = 3
+                        st.rerun()
+
+    # ========== STEP 3: KẾT QUẢ ==========
+    elif step == 3:
+        result = st.session_state.sa_result
+        if not result:
+            st.error("Không có kết quả. Vui lòng quay lại.")
+            return
+
+        if "error" in result:
+            st.error(result["error"])
+            if st.button("← Quay lại", key="sa_back_err"):
+                st.session_state.sa_step = 1
+                st.rerun()
+            return
+
+        # --- Warnings ---
+        for w in result.get("warnings", []):
+            st.warning(w)
+
+        # --- Phân tích điểm mạnh ---
+        strength = result.get("strength", {})
+        scores = result.get("scores", {})
+
+        st.markdown("### 📊 Phân tích Năng lực")
+        m_cols = st.columns(4)
+        with m_cols[0]:
+            st.metric("Điểm TB", f"{strength.get('avg', 0)}")
+        with m_cols[1]:
+            st.metric("Xu hướng", strength.get("category", "—"))
+        with m_cols[2]:
+            strongest = strength.get("strongest", [])
+            st.metric("Môn mạnh nhất", ", ".join(strongest[:2]) if strongest else "—")
+        with m_cols[3]:
+            st.metric("Số môn nhập", str(strength.get("total_subjects", 0)))
+
+        # --- Top tổ hợp ---
+        st.markdown("### 🏆 Top Tổ hợp Khối thi Mạnh nhất")
+        top_combos = result.get("top_combinations", [])
+        if top_combos:
+            combo_cols = st.columns(min(len(top_combos), 5))
+            for i, combo in enumerate(top_combos[:5]):
+                with combo_cols[i]:
+                    is_diem_liet = combo.get("has_diem_liet", False)
+                    is_below = combo.get("below_threshold", False)
+                    
+                    if is_diem_liet:
+                        border_color = "#8b0000" # Dark red for paralyzing score
+                        warning_html = "<div style='color:#8b0000;font-size:0.75em;font-weight:bold;'>🚨 BỊ ĐIỂM LIỆT</div>"
+                    elif is_below:
+                        border_color = "#ff4b4b" # Standard red for below 15
+                        warning_html = "<div style='color:#ff4b4b;font-size:0.75em;'>⚠️ Dưới ngưỡng 15</div>"
+                    else:
+                        border_color = "#00c853" # Green for good
+                        warning_html = ""
+                        
+                    st.markdown(f"""
+                    <div style="border: 2px solid {border_color}; border-radius: 12px; 
+                                padding: 16px; text-align: center; margin-bottom: 8px;">
+                        <div style="font-size: 1.4em; font-weight: 700;">{combo['code']}</div>
+                        <div style="font-size: 1.8em; font-weight: 800; color: {border_color};">
+                            {combo['total']}
+                        </div>
+                        <div style="font-size: 0.8em; opacity: 0.7;">
+                            {' + '.join(combo['subjects'])}
+                        </div>
+                        {warning_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # --- Bảng Top K trường ---
+        st.markdown(f"### 🎓 Top {len(result.get('matched_schools', []))} Trường Phù hợp")
+        df = result.get("matched_schools")
+        if df is not None and not df.empty:
+            # Format display for Thang_40
+            display_df = df.copy()
+            if "Thang_40" in display_df.columns:
+                display_df["Điểm chuẩn"] = display_df.apply(
+                    lambda r: f"{r['Điểm chuẩn']:.2f} (x2)" if r.get("Thang_40") else f"{r['Điểm chuẩn']:.2f}", 
+                    axis=1
+                )
+                display_df = display_df.drop(columns=["Thang_40"])
+                
+            if "Điểm min" in display_df.columns:
+                display_df["Điểm của bạn"] = display_df.apply(
+                    lambda r: f"{r['Điểm min']:.2f} - {r['Điểm của bạn']:.2f} (?)" if r.get("Điểm min") != r.get("Điểm của bạn") else f"{r['Điểm của bạn']:.2f}",
+                    axis=1
+                )
+                display_df = display_df.drop(columns=["Điểm min"])
+                
+            # Ẩn cột Delta khỏi giao diện người dùng theo yêu cầu
+            if "Delta" in display_df.columns:
+                display_df = display_df.drop(columns=["Delta"])
+                
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption(f"📈 Tổng cộng tìm thấy **{result.get('total_found', 0)}** trường/ngành phù hợp.")
+            st.info("💡 **Lưu ý Thang 40:** Các trường có điểm chuẩn > 30 (dấu `x2`) nhân hệ số 2 môn chính. Do quy định môn nhân đôi tùy thuộc vào đề án từng trường, hệ thống hiển thị **Khoảng điểm (Thấp nhất - Cao nhất)** thay vì phỏng đoán. Bạn hãy tự đối chiếu môn nhân đôi của trường để biết chính xác điểm của mình nằm ở đâu trong khoảng này.")
+        else:
+            st.info("Không tìm thấy trường phù hợp. Thử mở rộng phương thức xét tuyển hoặc kiểm tra lại điểm.")
+
+        # --- Phân tích AI ---
+        st.markdown("### 🤖 Phân tích Chuyên gia AI")
+        if df is not None and not df.empty:
+            with st.spinner("⏳ AI đang phân tích..."):
+                try:
+                    stream = generate_analysis_stream(result)
+                    if stream:
+                        response_text = st.write_stream(stream)
+                    else:
+                        st.info("AI không thể phân tích lúc này. Vui lòng tham khảo bảng dữ liệu ở trên.")
+                except Exception as e:
+                    st.warning(f"⚠️ AI tạm thời không khả dụng: {e}")
+
+        # --- Action buttons ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_a1, col_a2, col_a3 = st.columns(3)
+        with col_a1:
+            if st.button("🔄 Phân tích lại", key="sa_retry", use_container_width=True):
+                st.session_state.sa_step = 1
+                st.session_state.sa_result = None
+                st.rerun()
+        with col_a2:
+            if st.button("💬 Hỏi thêm AI", key="sa_to_chat", use_container_width=True, type="primary"):
+                # Inject context vào chat
+                if df is not None and not df.empty:
+                    context_msg = f"[Kết quả phân tích học bạ]\nĐiểm: {scores}\nTop trường: {df[['Trường','Tên ngành','Điểm chuẩn','Delta','Tier']].to_string(index=False)}"
+                    if "messages" not in st.session_state:
+                        st.session_state.messages = []
+                    st.session_state.messages.append({"role": "assistant", "content": context_msg})
+                st.session_state.page = "chat"
+                st.rerun()
+        with col_a3:
+            if st.button("🏠 Trang chủ", key="sa_home", use_container_width=True):
+                st.session_state.page = "home"
+                st.session_state.sa_step = 1
+                st.rerun()
+
 
 
 # === CHAT PAGE ===

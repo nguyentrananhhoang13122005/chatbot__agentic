@@ -262,10 +262,11 @@ Nhiệm vụ: Từ văn bản OCR thô bên dưới, hãy trích xuất ĐÚNG c
 
 QUY TẮC BẮT BUỘC:
 1. Điểm hợp lệ là số từ 0 đến 10 (ví dụ: 6.5, 8.0, 9, 10, 7.5). LOẠI BỎ các số khác (mã học sinh, ngày tháng, số trang...).
-2. Tên môn học phổ biến ở Việt Nam: Toán, Ngữ văn (Văn), Tiếng Anh (Anh), Vật lý (Lý), Hóa học (Hóa), Sinh học (Sinh), Lịch sử (Sử), Địa lý (Địa), GDCD, Tin học, Công nghệ, Thể dục, Âm nhạc, Mỹ thuật, Giáo dục QP-AN.
-3. Nếu OCR đọc sai ký tự (ví dụ: "Toin" → "Toán", "Vit Iy" → "Vật lý", "TIEN ANH" → "Tiếng Anh"), hãy sửa lại đúng.
-4. Nếu không thể xác định tên môn → ghi "Không rõ".
-5. Bỏ qua các hàng không phải môn học + điểm (họ tên, trường, lớp, ghi chú...).
+2. Tên môn học phổ biến ở Việt Nam: Toán, Ngữ văn (Văn), Tiếng Anh (Anh), Vật lý (Lý), Hóa học (Hóa), Sinh học (Sinh), Lịch sử (Sử), Địa lý (Địa), GDCD, Tin học.
+3. Các môn Ngoại ngữ 2: Tiếng Nhật, Tiếng Trung, Tiếng Pháp, Tiếng Đức, Tiếng Nga.
+4. Các môn Năng khiếu: Vẽ, Năng khiếu Mầm non, Năng khiếu Âm nhạc (hoặc Hát), Năng khiếu TDTT (hoặc Thể dục), Năng khiếu SKĐA, Năng khiếu Báo chí.
+5. Nếu OCR đọc sai ký tự (ví dụ: "Toin" → "Toán", "Vit Iy" → "Vật lý", "TIEN ANH" → "Tiếng Anh"), hãy sửa lại đúng.
+6. Bỏ qua các hàng không phải môn học + điểm (họ tên, trường, lớp, ghi chú...).
 
 Chỉ trả về bảng Markdown theo định dạng này, KHÔNG giải thích gì thêm:
 | Môn học | Điểm |
@@ -326,6 +327,68 @@ def parse_cv_scores(raw_ocr_text: str) -> str:
     return _llm_parse_scores(raw_ocr_text)
 
 
+def parse_scores_to_json(raw_ocr_text: str) -> dict:
+    """
+    Trích xuất điểm từ OCR text thành JSON tĩnh để score_calculator tính toán.
+    Khác với parse_cv_scores() trả Markdown, hàm này trả dict.
+
+    Output: {"Toán": 8.5, "Ngữ văn": 7.0, "Tiếng Anh": 9.0, ...}
+    Fallback: {} nếu parse lỗi
+    """
+    import json as _json
+
+    JSON_PARSE_PROMPT = """Bạn là công cụ trích xuất điểm số từ văn bản OCR học bạ Việt Nam.
+
+NHIỆM VỤ: Từ văn bản OCR bên dưới, trích xuất các cặp (Môn học, Điểm) và trả về JSON.
+
+QUY TẮC BẮT BUỘC:
+1. Điểm hợp lệ: số từ 0 đến 10 (ví dụ: 6.5, 8.0, 9, 10). LOẠI BỎ các số khác.
+2. Tên môn chuẩn hóa: Toán, Ngữ văn, Tiếng Anh, Vật lý, Hóa học, Sinh học, Lịch sử, Địa lý, GDCD, Tin học.
+3. Sửa lỗi OCR: "Toin" → "Toán", "Vit Iy" → "Vật lý", "TIEN ANH" → "Tiếng Anh".
+4. Nếu có nhiều cột điểm (Học kỳ 1, HK2, Cả năm), ưu tiên lấy điểm CẢ NĂM.
+5. Nếu có nhiều năm học (Lớp 10, 11, 12), ưu tiên lấy LỚP 12.
+
+CHỈ trả về JSON duy nhất, KHÔNG giải thích:
+{"Toán": 8.5, "Ngữ văn": 7.0, "Tiếng Anh": 9.0}"""
+
+    parsed, error_info = call_llm(
+        messages=[
+            {"role": "system", "content": JSON_PARSE_PROMPT},
+            {"role": "user",   "content": f"VĂN BẢN OCR THÔ:\n{raw_ocr_text}"}
+        ],
+        model_list=OPENROUTER_FALLBACK_MODELS,
+        temperature=0.0,
+        max_tokens=500,
+    )
+
+    if parsed:
+        # Cố gắng parse JSON từ response
+        text = parsed.strip()
+        # Loại bỏ markdown code block nếu có
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        try:
+            result = _json.loads(text)
+            if isinstance(result, dict):
+                # Validate: chỉ giữ các giá trị số 0-10
+                cleaned = {}
+                for k, v in result.items():
+                    try:
+                        score = float(v)
+                        if 0 <= score <= 10:
+                            cleaned[k] = round(score, 1)
+                    except (ValueError, TypeError):
+                        continue
+                print(f"DEBUG [parse_scores_to_json]: Extracted {len(cleaned)} subjects: {cleaned}")
+                return cleaned
+        except _json.JSONDecodeError:
+            print(f"WARNING [parse_scores_to_json]: Failed to parse JSON from LLM response")
+
+    if error_info:
+        print(f"ERROR [parse_scores_to_json]: {error_info['message']}")
+    return {}
+
+
 def _build_system_prompt(score_table: str, user_query: str, main_db_context: str) -> str:
     """Helper xây dựng system prompt chung cho các mode."""
     if score_table:
@@ -348,17 +411,19 @@ Rồi đề xuất ngành phù hợp với thế mạnh đó."""
 CÂU HỎI CỦA HỌC SINH: "{user_query}"
 
 YÊU CẦU TRẢ LỜI:
-1. **PHÂN TÍCH HỌC BẠ** (nếu có bảng điểm):
+1. **PHÂN TÍCH ĐIỂM MẠNH & HỌC BẠ** (nếu có bảng điểm):
    - Hiển thị bảng Môn học | Điểm đầy đủ
-   - Liệt kê rõ: MÔN MẠNH (>= 8.0) và MÔN YẾU (< 6.5)
-2. **ĐỀ XUẤT NGÀNH PHÙ HỢP** dựa trên môn mạnh:
+   - Xác định rõ MÔN HỌC THẾ MẠNH NHẤT (>= 8.0) và MÔN YẾU (< 6.5). Phân tích chi tiết năng lực dựa trên tổ hợp các môn mạnh.
+2. **ĐỀ XUẤT TRƯỜNG/NGÀNH TỐI ƯU**:
+   - Dựa vào Môn Thế Mạnh Nhất, tư vấn cụ thể tại sao ngành/trường đó lại phù hợp.
    - Toán/Lý/Hóa/Tin mạnh → CNTT, Kỹ thuật, Khoa học tự nhiên
    - Văn/Sử/Địa mạnh → Luật, Báo chí, Xã hội học, Ngôn ngữ
-   - Sinh/Hóa mạnh → Y dược, Công nghệ sinh học
-   - Anh mạnh → Ngoại ngữ, Quan hệ quốc tế, Du lịch
-   - GDCD/Văn mạnh → Luật, Công tác xã hội
+   - Sinh/Hóa mạnh → Y dược, Công nghệ sinh học, Nông lâm
+   - Anh/Ngoại ngữ khác mạnh → Ngôn ngữ học, Quan hệ quốc tế, Du lịch
+   - Năng khiếu mạnh (Vẽ/Hát/Thể thao) → Kiến trúc, Nghệ thuật, Báo chí, Thể dục thể thao
+   - Đặc biệt, giải thích lý do trường gợi ý phù hợp dựa trên điểm chuẩn và phổ điểm của thí sinh.
    Ưu tiên trường/ngành có trong DATABASE CHÍNH.
-3. **LỜI KHUYÊN** - 2-3 bước cụ thể cần làm.
+3. **LỜI KHUYÊN & CHIẾN LƯỢC** - 2-3 bước chuẩn bị hồ sơ hoặc chọn nguyện vọng (An toàn, Thử thách).
 4. **GỢI Ý CÂU HỎI** - 2-3 câu hỏi liên quan để hỏi tiếp.
 
 Tuyệt đối KHÔNG đưa thông tin thừa. Xưng "Tôi - Bạn/Em". Bắt đầu bằng**[Counselor Agent]**.
