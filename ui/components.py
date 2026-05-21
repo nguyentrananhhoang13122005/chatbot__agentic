@@ -16,7 +16,7 @@ def _safe_js_string(value: str) -> str:
 
 @st.dialog("Đăng nhập hoặc đăng ký", width="small")
 def login_dialog():
-    from app import _store_oauth_state
+    from auth import _store_oauth_state
     state = secrets.token_urlsafe(32)
     st.session_state.oauth_state = state
     _store_oauth_state(state)

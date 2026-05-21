@@ -9,7 +9,7 @@ if sys.stdout.encoding != 'utf-8':
 from llm_client import validate_api_key
 from chat_db import init_db, new_session_id, cleanup_old_sessions
 from auth_db import init_auth_db
-from auth import handle_google_callback
+from auth import handle_google_callback, _consume_oauth_state
 
 st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
 
@@ -17,32 +17,6 @@ st.set_page_config(page_title="UniSearch AI", page_icon="🎓", layout="wide", i
 init_db()
 init_auth_db()
 cleanup_old_sessions(days=20)
-
-# ── Module-level OAuth state store ──────────────────────────────
-# st.session_state is tied to the WebSocket; when the browser
-# navigates away (Google OAuth redirect) the socket disconnects
-# and the session may be lost.  A module-level dict survives
-# across Streamlit sessions inside the same server process.
-_OAUTH_TTL = 600                        # 10 minutes
-
-@st.cache_resource
-def _get_oauth_store() -> dict:
-    """Shared dict that survives Streamlit reruns."""
-    return {}
-
-def _store_oauth_state(state: str):
-    store = _get_oauth_store()
-    store[state] = time.time()
-    cutoff = time.time() - _OAUTH_TTL
-    for k in [k for k, v in store.items() if v < cutoff]:
-        store.pop(k, None)
-
-def _consume_oauth_state(state: str) -> bool:
-    store = _get_oauth_store()
-    if state and state in store:
-        ts = store.pop(state)
-        return (time.time() - ts) < _OAUTH_TTL
-    return False
 
 if "code" in st.query_params:
     received_state = st.query_params.get("state", "")
