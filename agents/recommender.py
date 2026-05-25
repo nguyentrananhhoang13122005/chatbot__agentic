@@ -7,41 +7,126 @@ if sys.stdout.encoding != 'utf-8':
 from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
 
 # --- KHỞI TẠO DATABASE ---
-# Load Data một lần duy nhất vào RAM khi ứng dụng khởi chạy (tăng tốc độ phản hồi)
+# Để tránh OOM và Full Table Scan, giờ ta ưu tiên dùng SQLite thay vì load toàn bộ CSV vào RAM.
+import sqlite3
+
+DB_PATH = "data/admissions.db"
 csv_path = "data/data_tuyensinh_clean.csv"
 verified_path = "data/data_diem_chuan_verified.csv"
-dats_2026_path = "data/data_tuyensinh_2026.csv"
-dats_2025_path = "data/data_tuyensinh_2025_dats.csv"
-dats_2024_path = "data/data_tuyensinh_2024.csv"
+master_path = "data/data_tuyensinh_master.csv"
 
+# Vẫn giữ df_tuyensinh vì nó nhỏ và ít khi query nặng
 try:
     if os.path.exists(csv_path):
         df_tuyensinh = pd.read_csv(csv_path, low_memory=False).fillna("")
     else:
         df_tuyensinh = None
 
-    if os.path.exists(verified_path):
-        df_verified = pd.read_csv(verified_path).fillna("")
-        print(f"✅ [Recommender] Verified DB loaded: {len(df_verified)} dòng, {df_verified['Trường'].nunique()} trường")
+    # Thay vì load toàn bộ df_verified và df_dats vào RAM, ta kiểm tra SQLite
+    if os.path.exists(DB_PATH):
+        print("✅ [Recommender] Kết nối thành công tới SQLite Database (Admissions.db)")
+        # Khởi tạo dummy biến để pass qua các check `if df_verified is not None`
+        df_verified = pd.DataFrame({'Trường': []}) 
+        df_dats = pd.DataFrame({'Trường': []})
     else:
-        df_verified = None
+        print("⚠️ [Recommender] Chưa có SQLite DB, fallback dùng CSV (Chậm & tốn RAM).")
+        if os.path.exists(verified_path):
+            df_verified = pd.read_csv(verified_path).fillna("")
+        else:
+            df_verified = None
 
-    # --- Load DATS Master ---
-    master_path = "data/data_tuyensinh_master.csv"
-    if os.path.exists(master_path):
-        df_dats = pd.read_csv(master_path).fillna("")
-        df_2026 = df_dats[df_dats['Năm'] == 2026]
-        print(f"✅ [Recommender] DATS tổng hợp (Master) loaded: {len(df_dats)} bản ghi")
-    else:
-        df_dats = None
-        df_2026 = None
+        if os.path.exists(master_path):
+            df_dats = pd.read_csv(master_path).fillna("")
+        else:
+            df_dats = None
 
 except Exception as e:
     print("Lỗi load Database:", e)
     df_tuyensinh = None
     df_verified = None
-    df_2026 = None
     df_dats = None
+
+def get_verified_schools():
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            schools = [r[0] for r in conn.execute('SELECT DISTINCT "Trường" FROM diem_chuan_verified WHERE "Trường" IS NOT NULL').fetchall()]
+            conn.close()
+            return schools
+        except:
+            pass
+    if df_verified is not None and not df_verified.empty:
+        return df_verified['Trường'].dropna().unique().tolist()
+    return []
+
+def get_dats_schools():
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            schools = [r[0] for r in conn.execute('SELECT DISTINCT "Trường" FROM dats_master WHERE "Trường" IS NOT NULL').fetchall()]
+            conn.close()
+            return schools
+        except:
+            pass
+    if df_dats is not None and not df_dats.empty:
+        return df_dats['Trường'].dropna().unique().tolist()
+    return []
+
+def get_dats_school_rows(school_name):
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            df = pd.read_sql_query('SELECT * FROM dats_master WHERE "Trường" = ?', conn, params=(school_name,))
+            conn.close()
+            return df
+        except:
+            pass
+    if df_dats is not None and not df_dats.empty:
+        return df_dats[df_dats['Trường'] == school_name]
+    return pd.DataFrame()
+
+def get_verified_by_school(matched_schools):
+    if not matched_schools: return pd.DataFrame()
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            placeholders = ','.join(['?']*len(matched_schools))
+            df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Trường" IN ({placeholders})', conn, params=matched_schools)  # nosec B608
+            conn.close()
+            return df
+        except:
+            pass
+    if df_verified is not None and not df_verified.empty:
+        return df_verified[df_verified['Trường'].isin(matched_schools)].copy()
+    return pd.DataFrame()
+
+def get_verified_cross_search(code_keywords, text_keywords):
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            df = pd.DataFrame()
+            if code_keywords:
+                placeholders = ','.join(['?']*len(code_keywords))
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Mã ngành" IN ({placeholders})', conn, params=code_keywords)  # nosec B608
+            if df.empty and text_keywords:
+                conditions = " OR ".join(['"Tên ngành" LIKE ?' for _ in text_keywords])
+                params = [f"%{k}%" for k in text_keywords]
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE {conditions}', conn, params=params)  # nosec B608
+            conn.close()
+            return df
+        except:
+            pass
+            
+    # Fallback pandas
+    vf_cross = pd.DataFrame()
+    if df_verified is not None and not df_verified.empty:
+        if code_keywords:
+            pattern = '|'.join(code_keywords)
+            vf_cross = df_verified[df_verified['Mã ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+        if vf_cross.empty and text_keywords:
+            pattern = '|'.join(text_keywords)
+            vf_cross = df_verified[df_verified['Tên ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+    return vf_cross
 
 # ======== HELPER: HYBRID SCHOOL MATCHER (BM25 + Fuzzy + Token Overlap) ========
 import math
@@ -289,8 +374,8 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
 
     # ======== GUARD 0: KIỂM TRA ĐA TRƯỜNG — PHẢI TRƯỚC MỌI LOOKUP ========
     # Dùng verified DB (290 trường) để phát hiện ambiguity
-    if df_verified is not None and not df_verified.empty and truong != "ALL":
-        all_schools = df_verified['Trường'].dropna().unique().tolist()
+    all_schools = get_verified_schools()
+    if all_schools and truong != "ALL":
         all_matches = find_matching_schools(truong, all_schools, location=pre_extracted_location)
 
         # Nếu nhiều trường khớp → HỎI LẠI, không đoán mò
@@ -309,16 +394,10 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
     has_specific_keyword = tu_khoa != "ALL" and not any(m in tu_khoa.lower() for m in ['điểm', 'chuẩn'])
     if truong == "ALL" and has_specific_keyword and df_verified is not None and not df_verified.empty:
         major_keywords = [kw.strip() for kw in tu_khoa.split('|') if kw.strip()]
-        code_keywords = [kw for kw in major_keywords if kw.isdigit()]
-        text_keywords = [kw for kw in major_keywords if not kw.isdigit()]
+        code_keywords = [kw for kw in major_keywords if re.search(r'\d{5,}', kw)]
+        text_keywords = [kw for kw in major_keywords if kw not in code_keywords]
 
-        vf_cross = pd.DataFrame()
-        if code_keywords:
-            pattern = '|'.join(code_keywords)
-            vf_cross = df_verified[df_verified['Mã ngành'].astype(str).str.contains(pattern, case=False, na=False)]
-        if vf_cross.empty and text_keywords:
-            pattern = '|'.join(text_keywords)
-            vf_cross = df_verified[df_verified['Tên ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+        vf_cross = get_verified_cross_search(code_keywords, text_keywords)
 
         if not vf_cross.empty:
             # Lọc theo năm: VÒNG LẶP 2026 → 2025 → 2024
@@ -340,9 +419,8 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
             vf_cross = vf_cross.replace('', pd.NA).dropna(axis=1, how='all')
 
             # SẮP XẾP theo Điểm chuẩn GIẢM DẦN + ĐA DẠNG HOÁ trường
-            if 'Điểm chuẩn' in vf_cross.columns:
-                vf_cross['_score'] = pd.to_numeric(vf_cross['Điểm chuẩn'], errors='coerce').fillna(0)
-                vf_cross = vf_cross.sort_values('_score', ascending=False)
+            if 'Điểm chuẩn_Num' in vf_cross.columns:
+                vf_cross = vf_cross.sort_values('Điểm chuẩn_Num', ascending=False)
 
                 # Lấy dòng điểm cao nhất của MỖI trường (đa dạng kết quả)
                 vf_cross_top = vf_cross.drop_duplicates(subset=['Trường'], keep='first')
@@ -425,7 +503,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 
     # ======== BƯỚC 1: TRA CỨU DATS — TỰ ĐỘNG TÌM NĂM CÓ DỮ LIỆU PHÙ HỢP ========
     # Luôn thử DATS trước cho MỌI loại câu hỏi (admission + score)
-    if df_dats is not None and not df_dats.empty and truong != "ALL":
+    list_check = get_dats_schools()
+    if list_check and truong != "ALL":
 
         # Xác định năm tìm kiếm
         if nam > 0:
@@ -434,7 +513,6 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             target_year = 2026
 
         # Tìm trường trong DATS Master
-        list_check = df_dats['Trường'].dropna().unique().tolist()
         exact_dats = [s for s in list_check if s == truong]
         if exact_dats:
             matched_check = exact_dats
@@ -445,7 +523,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         best_match = None
         if len(matched_check) == 1:
             s = matched_check[0]
-            school_rows = df_dats[df_dats['Trường'] == s]
+            school_rows = get_dats_school_rows(s)
             
             for _, r in school_rows.iterrows():
                 available_years.append((r['Năm'], s))
@@ -579,8 +657,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             is_structured_query = any(kw in query_lower for kw in structured_query_keywords)
             
             prefer_verified = False
-            if is_structured_query and df_verified is not None and not df_verified.empty:
-                verified_schools_list = df_verified['Trường'].dropna().unique().tolist()
+            verified_schools_list = get_verified_schools()
+            if is_structured_query and verified_schools_list:
                 exact_vf = [s for s in verified_schools_list if s == school_found]
                 if not exact_vf:
                     exact_vf = find_matching_schools(school_found, verified_schools_list, strict=True, location=pre_extracted_location)
@@ -670,8 +748,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             )
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
-    if df_verified is not None and not df_verified.empty and truong != "ALL":
-        list_of_verified_schools = df_verified['Trường'].dropna().unique().tolist()
+    list_of_verified_schools = get_verified_schools()
+    if list_of_verified_schools and truong != "ALL":
         # Exact match priority: nếu truong đã được resolve bởi Guard 0 → match chính xác
         exact_verified = [s for s in list_of_verified_schools if s == truong]
         if exact_verified:
@@ -687,7 +765,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         if not matched_schools:
             vf_school = pd.DataFrame()
         else:
-            vf_school = df_verified[df_verified['Trường'].isin(matched_schools)].copy()
+            vf_school = get_verified_by_school(matched_schools)
 
         if not vf_school.empty:
             # --- Lọc theo ngành nếu user chỉ định ---
@@ -696,8 +774,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 
             if has_specific_major:
                 major_keywords = [kw.strip() for kw in tu_khoa.split('|') if kw.strip()]
-                code_keywords = [kw for kw in major_keywords if kw.isdigit()]
-                text_keywords = [kw for kw in major_keywords if not kw.isdigit()]
+                code_keywords = [kw for kw in major_keywords if re.search(r'\d{5,}', kw)]
+                text_keywords = [kw for kw in major_keywords if kw not in code_keywords]
 
                 if code_keywords:
                     major_pattern = '|'.join(code_keywords)
@@ -846,7 +924,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
-                    sorted_df = vf_match.sort_values('Điểm chuẩn', ascending='thấp' in query_lower).head(10)
+                    sort_col = 'Điểm chuẩn_Num' if 'Điểm chuẩn_Num' in vf_match.columns else 'Điểm chuẩn'
+                    sorted_df = vf_match.sort_values(sort_col, ascending='thấp' in query_lower).head(10)
                     table = "| Tên ngành | Phương thức | Điểm chuẩn |\n|---|---|---|\n"
                     for _, r in sorted_df.iterrows():
                         table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"
