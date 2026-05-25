@@ -91,7 +91,7 @@ def get_verified_by_school(matched_schools):
         try:
             conn = sqlite3.connect(DB_PATH)
             placeholders = ','.join(['?']*len(matched_schools))
-            df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Trường" IN ({placeholders})', conn, params=matched_schools)
+            df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Trường" IN ({placeholders})', conn, params=matched_schools)  # nosec B608
             conn.close()
             return df
         except:
@@ -107,11 +107,11 @@ def get_verified_cross_search(code_keywords, text_keywords):
             df = pd.DataFrame()
             if code_keywords:
                 placeholders = ','.join(['?']*len(code_keywords))
-                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Mã ngành" IN ({placeholders})', conn, params=code_keywords)
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Mã ngành" IN ({placeholders})', conn, params=code_keywords)  # nosec B608
             if df.empty and text_keywords:
                 conditions = " OR ".join(['"Tên ngành" LIKE ?' for _ in text_keywords])
                 params = [f"%{k}%" for k in text_keywords]
-                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE {conditions}', conn, params=params)
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE {conditions}', conn, params=params)  # nosec B608
             conn.close()
             return df
         except:
