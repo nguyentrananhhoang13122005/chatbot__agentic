@@ -50,6 +50,18 @@ def init_db():
         conn.execute("ALTER TABLE chat_sessions ADD COLUMN user_id TEXT DEFAULT NULL")
     except sqlite3.OperationalError:
         pass
+    # Bảng lịch sử trường ĐH đã tra cứu
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS searched_universities (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     TEXT NOT NULL,
+            school_name TEXT NOT NULL,
+            query_text  TEXT DEFAULT '',
+            session_id  TEXT DEFAULT '',
+            searched_at TEXT NOT NULL,
+            UNIQUE(user_id, school_name)
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -261,3 +273,74 @@ def format_session_date(iso_str: str) -> str:
             return dt.strftime("%d/%m/%Y")
     except Exception:
         return iso_str[:10]
+
+
+# ============================================================
+# SEARCHED UNIVERSITIES — Lịch sử trường ĐH đã tra cứu
+# ============================================================
+
+def save_searched_university(user_id: str, school_name: str, query_text: str = "", session_id: str = ""):
+    """Lưu trường ĐH đã tra cứu. UPSERT: nếu đã tồn tại → cập nhật thời gian + query."""
+    if not user_id or not school_name or not school_name.strip():
+        return
+    now = datetime.now().isoformat()
+    conn = _get_conn()
+    conn.execute("""
+        INSERT INTO searched_universities (user_id, school_name, query_text, session_id, searched_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, school_name) DO UPDATE SET
+            query_text  = excluded.query_text,
+            session_id  = excluded.session_id,
+            searched_at = excluded.searched_at
+    """, (user_id, school_name.strip(), query_text[:200], session_id, now))
+    conn.commit()
+    conn.close()
+
+
+def list_searched_universities(user_id: str, limit: int = 50) -> list[dict]:
+    """Liệt kê trường ĐH đã tra cứu, mới nhất trước."""
+    if not user_id:
+        return []
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT school_name, query_text, session_id, searched_at
+        FROM searched_universities
+        WHERE user_id = ?
+        ORDER BY searched_at DESC
+        LIMIT ?
+    """, (user_id, limit)).fetchall()
+    conn.close()
+    return [
+        {
+            "school_name": r["school_name"],
+            "query_text": r["query_text"],
+            "session_id": r["session_id"],
+            "searched_at": r["searched_at"],
+        }
+        for r in rows
+    ]
+
+
+def delete_searched_university(user_id: str, school_name: str) -> bool:
+    """Xóa 1 trường khỏi lịch sử tra cứu."""
+    conn = _get_conn()
+    cursor = conn.execute(
+        "DELETE FROM searched_universities WHERE user_id = ? AND school_name = ?",
+        (user_id, school_name),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
+def clear_searched_universities(user_id: str) -> int:
+    """Xóa toàn bộ lịch sử tra cứu trường của user. Trả về số bản ghi đã xóa."""
+    conn = _get_conn()
+    cursor = conn.execute(
+        "DELETE FROM searched_universities WHERE user_id = ?",
+        (user_id,),
+    )
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
