@@ -4,6 +4,8 @@ score_calculator.py — Module tính toán tổ hợp khối thi & phân tích �
 Chạy offline, không gọi API. Dữ liệu tĩnh.
 """
 
+from utils.admission_models import AdmissionRule, ScoreResult
+
 # ======================================================================
 # BẢNG MAPPING TỔ HỢP KHỐI THI PHỔ BIẾN (20+ khối)
 # Nguồn: Bộ GD&ĐT, Hocmai.vn, Tuyensinh247.com
@@ -25,6 +27,13 @@ COMBINATIONS: dict[str, list[str]] = {
     "A09": ["Toán", "Địa lý", "GDCD"],
     "A10": ["Toán", "Vật lý", "GDCD"],
     "A11": ["Toán", "Hóa học", "GDCD"],
+    "A12": ["Toán", "Khoa học tự nhiên", "Khoa học xã hội"],
+    "A13": ["Toán", "Khoa học tự nhiên", "Lịch sử"],
+    "A14": ["Toán", "Khoa học tự nhiên", "Địa lý"],
+    "A15": ["Toán", "Khoa học tự nhiên", "GDCD"],
+    "A16": ["Toán", "Khoa học tự nhiên", "Ngữ văn"],
+    "A17": ["Toán", "Vật lý", "Khoa học xã hội"],
+    "A18": ["Toán", "Hóa học", "Khoa học xã hội"],
 
     # ==================================================================
     # Khối B — Y sinh (B00–B08)
@@ -34,6 +43,7 @@ COMBINATIONS: dict[str, list[str]] = {
     "B02": ["Toán", "Sinh học", "Địa lý"],
     "B03": ["Toán", "Sinh học", "Ngữ văn"],
     "B04": ["Toán", "Sinh học", "GDCD"],
+    "B05": ["Toán", "Sinh học", "Khoa học xã hội"],
     "B08": ["Toán", "Sinh học", "Tiếng Anh"],
 
     # ==================================================================
@@ -54,6 +64,7 @@ COMBINATIONS: dict[str, list[str]] = {
     "C12": ["Ngữ văn", "Sinh học", "Lịch sử"],
     "C13": ["Ngữ văn", "Sinh học", "Lịch sử"],
     "C14": ["Ngữ văn", "Toán", "GDCD"],
+    "C15": ["Ngữ văn", "Toán", "Khoa học xã hội"],
     "C16": ["Ngữ văn", "Vật lý", "GDCD"],
     "C17": ["Ngữ văn", "Hóa học", "GDCD"],
     "C19": ["Ngữ văn", "Lịch sử", "GDCD"],
@@ -118,6 +129,8 @@ COMBINATIONS: dict[str, list[str]] = {
     "D38": ["Toán", "Lịch sử", "Tiếng Nhật"],      # MỚI
     "D39": ["Toán", "Lịch sử", "Tiếng Pháp"],      # MỚI
     "D40": ["Toán", "Lịch sử", "Tiếng Trung"],     # MỚI
+    "D45": ["Ngữ văn", "Địa lý", "Tiếng Trung"],
+    "D65": ["Ngữ văn", "Lịch sử", "Tiếng Trung"],
     
     # D66-D70: Ngữ văn + GDCD + Ngoại ngữ
     "D66": ["Ngữ văn", "GDCD", "Tiếng Anh"],       # TRẢ LẠI TÊN ĐÚNG (trước đây bị nhầm thành H06)
@@ -125,6 +138,10 @@ COMBINATIONS: dict[str, list[str]] = {
     "D68": ["Ngữ văn", "GDCD", "Tiếng Pháp"],
     "D69": ["Ngữ văn", "GDCD", "Tiếng Nhật"],
     "D70": ["Ngữ văn", "GDCD", "Tiếng Trung"],
+    "D71": ["Ngữ văn", "GDCD", "Tiếng Đức"],
+    "D78": ["Ngữ văn", "Khoa học xã hội", "Tiếng Anh"],
+    "D84": ["Toán", "GDCD", "Tiếng Anh"],
+    "D90": ["Toán", "Khoa học tự nhiên", "Tiếng Anh"],
 
     # ==================================================================
     # Khối H — Nghệ Thuật / Năng khiếu Mỹ thuật (H00–H08)
@@ -498,3 +515,135 @@ def format_combination_display(combo: dict) -> str:
             f"= **{combo['total']}** điểm"
         )
     return f"{combo['code']} ({' + '.join(combo['subjects'])}) = {combo['total']} điểm"
+
+
+def calc_exam_score(
+    subjects: dict[str, float],
+    combo_code: str,
+    rule: AdmissionRule,
+    priority_score: float = 0.0,
+) -> ScoreResult:
+    """
+    Calculate a validated combo score for the exam-advising pipeline.
+
+    The caller must validate missing/not-taken subjects before invoking this
+    function; missing combo scores raise ValueError.
+    """
+    if any(value is None for value in subjects.values()):
+        raise ValueError("subjects must be validated")
+
+    combo_subjects = COMBINATIONS.get(combo_code)
+    if not combo_subjects:
+        raise ValueError(f"Unsupported combo code: {combo_code}")
+
+    missing = [subject for subject in combo_subjects if subject not in subjects]
+    if missing:
+        raise ValueError(f"Missing validated scores for {combo_code}: {', '.join(missing)}")
+
+    scores = [float(subjects[subject]) for subject in combo_subjects]
+    factors = _resolve_multiplier_factors(combo_subjects, rule)
+    mode = rule.mode or "normal_30"
+
+    if mode == "weighted_40_range":
+        base_total = sum(scores)
+        raw_min = round(base_total + min(scores), 2)
+        raw_max = round(base_total + max(scores), 2)
+        min_bonus = _calculate_scaled_priority(raw_min, priority_score, 40.0)
+        max_bonus = _calculate_scaled_priority(raw_max, priority_score, 40.0)
+        final_min = round(raw_min + min_bonus, 2)
+        final_max = round(raw_max + max_bonus, 2)
+        return ScoreResult(
+            mode=mode,
+            raw_score=raw_min,
+            priority_adjusted=min_bonus,
+            final_score=final_min,
+            score_min=final_min,
+            score_max=final_max,
+            ranking_score=final_min,
+            explanation=(
+                f"{combo_code}: thang 40 chưa rõ môn nhân; "
+                f"rank bằng lower bound {raw_min:g} + ưu tiên {min_bonus:g}"
+            ),
+        )
+
+    weighted_sum = sum(score * factor for score, factor in zip(scores, factors))
+    factor_sum = sum(factors)
+    if mode == "weighted_40":
+        raw_score = round(weighted_sum, 2)
+        adjusted_bonus = _calculate_scaled_priority(raw_score, priority_score, 40.0)
+        explanation = _weighted_explanation(combo_code, combo_subjects, factors, raw_score, adjusted_bonus, 40)
+    elif mode == "weighted_convert_30":
+        raw_score = round((weighted_sum / factor_sum) * 3, 2)
+        adjusted_bonus = calculate_adjusted_bonus(raw_score, priority_score)
+        explanation = _weighted_explanation(combo_code, combo_subjects, factors, raw_score, adjusted_bonus, 30)
+    else:
+        raw_score = round(sum(scores), 2)
+        adjusted_bonus = calculate_adjusted_bonus(raw_score, priority_score)
+        explanation = f"{combo_code}: tổng 3 môn = {raw_score:g}; ưu tiên = {adjusted_bonus:g}"
+
+    final_score = round(raw_score + adjusted_bonus, 2)
+    return ScoreResult(
+        mode=mode,
+        raw_score=raw_score,
+        priority_adjusted=adjusted_bonus,
+        final_score=final_score,
+        score_min=None,
+        score_max=None,
+        ranking_score=final_score,
+        explanation=explanation,
+    )
+
+
+def _resolve_multiplier_factors(combo_subjects: list[str], rule: AdmissionRule) -> list[float]:
+    factors = [1.0 for _ in combo_subjects]
+    for multiplier in rule.multipliers:
+        applied = False
+        for index, subject in enumerate(combo_subjects):
+            if _multiplier_applies(multiplier, subject):
+                factors[index] = max(factors[index], float(multiplier.factor))
+                applied = True
+        if not applied and multiplier.subject is None and not multiplier.candidates:
+            # Unknown "thang 40" multipliers are intentionally handled as range mode.
+            continue
+    return factors
+
+
+def _multiplier_applies(multiplier, subject: str) -> bool:
+    if multiplier.subject and multiplier.subject == subject:
+        return True
+    if multiplier.candidates and subject in multiplier.candidates:
+        return True
+    if multiplier.subject_role == "foreign_language_in_combo" and subject.startswith("Tiếng "):
+        return True
+    if multiplier.subject_role == "aptitude_detail":
+        return subject.startswith("Năng khiếu") or subject.startswith("Vẽ")
+    return False
+
+
+def _calculate_scaled_priority(raw_score: float, priority_score: float, scale: float) -> float:
+    if priority_score <= 0:
+        return 0.0
+    scaled_priority = priority_score * (scale / 30.0)
+    threshold = 0.75 * scale
+    if raw_score < threshold:
+        return round(scaled_priority, 2)
+    denominator = scale - threshold
+    factor = max(0.0, (scale - raw_score) / denominator)
+    return round(scaled_priority * factor, 2)
+
+
+def _weighted_explanation(
+    combo_code: str,
+    combo_subjects: list[str],
+    factors: list[float],
+    raw_score: float,
+    adjusted_bonus: float,
+    scale: int,
+) -> str:
+    parts = []
+    for subject, factor in zip(combo_subjects, factors):
+        parts.append(f"{subject}×{factor:g}" if factor != 1 else subject)
+    return (
+        f"{combo_code}: {' + '.join(parts)} = {raw_score:g} "
+        f"(thang {scale}); ưu tiên = {adjusted_bonus:g}"
+    )

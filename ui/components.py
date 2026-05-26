@@ -3,6 +3,7 @@ import json
 import io
 import datetime
 import secrets
+import html
 import streamlit.components.v1 as components
 from auth import get_google_auth_url, login_user, register_user, logout
 from chat_db import new_session_id, save_session, list_sessions, load_session_for_user, delete_session, toggle_bookmark, rename_session, format_session_date
@@ -362,6 +363,296 @@ def render_home_page():
 
 
 # === SCORE ANALYSIS PAGE ===
+_SCORE_INPUT_PLACEHOLDER = "Nhập điểm"
+_EXTRA_APTITUDE_DETAIL_INPUTS = [
+    "Vẽ HHMT",
+    "Vẽ TTM",
+    "Năng khiếu SKĐA 1",
+    "Năng khiếu SKĐA 2",
+    "Năng khiếu TDTT 1",
+    "Năng khiếu TDTT 2",
+]
+_EXAM_MODE_LABEL = "📝 Xét điểm thi THPT"
+_TRANSCRIPT_MODE_LABEL = "📋 Xét điểm Học bạ THPT"
+
+
+def _score_widget_key(subject: str) -> str:
+    return subject.replace(" ", "_").replace("/", "_")
+
+
+def _clear_score_input_widgets() -> None:
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(("sa_score_choice_", "sa_score_text_", "sa_score_not_taken_")):
+            st.session_state.pop(key, None)
+
+
+def _missing_input_targets(missing_inputs: list[str]) -> dict[str, bool]:
+    text = " ".join(str(item).lower() for item in missing_inputs)
+    return {
+        "language": any(item in text for item in ["tiếng nhật", "tiếng trung", "tiếng pháp", "tiếng đức", "tiếng nga"]),
+        "aptitude": any(item in text for item in ["vẽ", "năng khiếu"]),
+        "certificate": any(item in text for item in ["ielts", "toefl", "toeic", "chứng chỉ"]),
+        "school_record": any(item in text for item in ["đtb", "lớp 12", "học lực"]),
+    }
+
+
+def _scroll_to_score_input_anchor() -> None:
+    components.html(
+        """
+        <script>
+        setTimeout(function() {
+            try {
+                const anchor = window.parent.document.getElementById("sa-score-input-anchor");
+                if (anchor) {
+                    anchor.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+            } catch (error) {}
+        }, 120);
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
+def _default_score_text(subject: str, existing: dict, not_taken_subjects: set[str]) -> str:
+    if subject in not_taken_subjects:
+        return ""
+    if subject not in existing:
+        return ""
+    try:
+        score = float(existing[subject])
+    except (TypeError, ValueError):
+        return ""
+    return _format_decimal_default(max(0.0, min(10.0, score)))
+
+
+def _parse_decimal_score(value: str, max_value: float) -> float | None:
+    text = str(value or "").strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        score = float(text)
+    except ValueError:
+        return None
+    if 0.0 <= score <= max_value:
+        return round(score, 2)
+    return None
+
+
+def _format_decimal_default(value: float) -> str:
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _render_subject_score_input(subject: str, existing: dict, not_taken_subjects: set[str]) -> tuple[float | None, bool, bool]:
+    key = _score_widget_key(subject)
+    score_col, not_taken_col = st.columns([3.4, 1], vertical_alignment="bottom")
+    with not_taken_col:
+        not_taken = st.checkbox(
+            "Không thi",
+            value=subject in not_taken_subjects,
+            key=f"sa_score_not_taken_{key}",
+        )
+    with score_col:
+        text_value = st.text_input(
+            subject,
+            value=_default_score_text(subject, existing, not_taken_subjects),
+            placeholder=_SCORE_INPUT_PLACEHOLDER,
+            disabled=not_taken,
+            key=f"sa_score_text_{key}",
+        )
+
+    if not_taken:
+        return None, True, True
+    if not str(text_value or "").strip():
+        return None, False, True
+    score = _parse_decimal_score(text_value, 10.0)
+    if score is None:
+        st.error(f"Điểm {subject} phải là số trong khoảng 0-10.")
+        return None, False, False
+    return score, False, True
+
+
+def _render_ielts_input() -> None:
+    ielts_options = [value / 2 for value in range(0, 19)]
+    current = st.session_state.get("sa_ielts", 0.0)
+    try:
+        current_value = float(current or 0.0)
+    except (TypeError, ValueError):
+        current_value = 0.0
+    if current_value not in ielts_options:
+        current_value = 0.0
+    st.selectbox(
+        "IELTS",
+        ielts_options,
+        index=ielts_options.index(current_value),
+        format_func=lambda value: "Không có" if value == 0 else f"{value:.1f}",
+        key="sa_ielts",
+    )
+
+
+def _positive_session_float(key: str) -> float | None:
+    try:
+        value = float(st.session_state.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _selected_score_mode() -> str:
+    label = st.session_state.get("sa_mode_radio", _EXAM_MODE_LABEL)
+    return "exam" if label == _EXAM_MODE_LABEL else "transcript"
+
+
+def _build_score_analysis_payload(mode: str) -> dict:
+    raw_scores = dict(st.session_state.get("sa_scores", {}))
+    if mode != "exam":
+        return raw_scores
+
+    from utils.score_calculator import EXTRA_APTITUDE
+
+    aptitude_names = set(EXTRA_APTITUDE) | set(_EXTRA_APTITUDE_DETAIL_INPUTS)
+    aptitude_scores = {
+        subject: score
+        for subject, score in raw_scores.items()
+        if subject in aptitude_names or subject.startswith("Vẽ") or subject.startswith("Năng khiếu")
+    }
+    exam_scores = {subject: score for subject, score in raw_scores.items() if subject not in aptitude_scores}
+    academic_rank = st.session_state.get("sa_rank12")
+    if academic_rank == "Không chọn":
+        academic_rank = None
+
+    return {
+        "exam_scores": exam_scores,
+        "aptitude_scores": aptitude_scores,
+        "not_taken_subjects": list(st.session_state.get("sa_not_taken_subjects", set())),
+        "ielts": _positive_session_float("sa_ielts"),
+        "toefl": _positive_session_float("sa_toefl"),
+        "toeic": _positive_session_float("sa_toeic"),
+        "gpa_12": _positive_session_float("sa_gpa12"),
+        "academic_rank_12": academic_rank,
+    }
+
+
+def _current_score_analysis_result() -> dict | None:
+    mode = st.session_state.get("sa_mode", "exam")
+    if mode == "exam":
+        return st.session_state.get("sa_exam_result")
+    return st.session_state.get("sa_transcript_result")
+
+
+def _to_float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:
+        return None
+    return number
+
+
+def _format_score_number(value) -> str:
+    number = _to_float(value)
+    if number is None:
+        return str(value or "")
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _format_score_range(row) -> str:
+    min_score = _to_float(row.get("Điểm min"))
+    max_score = _to_float(row.get("Điểm của bạn"))
+    if min_score is not None and max_score is not None and abs(min_score - max_score) > 0.001:
+        return f"{_format_score_number(min_score)} - {_format_score_number(max_score)}"
+    return _format_score_number(row.get("Điểm của bạn"))
+
+
+def _format_cutoff(row) -> str:
+    cutoff = _format_score_number(row.get("Điểm chuẩn"))
+    if not cutoff:
+        return ""
+    pieces = [cutoff]
+    if "Thang_40" in row:
+        scale_flag = str(row.get("Thang_40", "")).strip().lower()
+        is_thang_40 = bool(row.get("Thang_40")) and scale_flag not in {"false", "0", "nan", "none"}
+        pieces.append("thang 40" if is_thang_40 else "thang 30")
+    year = row.get("Năm")
+    year_number = _to_float(year)
+    if year_number is not None:
+        pieces.append(str(int(year_number)))
+    elif year is not None and str(year).strip().lower() not in {"", "nan", "none"}:
+        pieces.append(str(year))
+    return " / ".join(pieces)
+
+
+def _format_annotation(row) -> str:
+    annotation = str(row.get("Chú thích") or "").strip()
+    min_score = _to_float(row.get("Điểm min"))
+    max_score = _to_float(row.get("Điểm của bạn"))
+    scale_flag = str(row.get("Thang_40", "")).strip().lower()
+    is_thang_40 = bool(row.get("Thang_40")) and scale_flag not in {"false", "0", "nan", "none"}
+    if is_thang_40 and min_score is not None and max_score is not None and abs(min_score - max_score) > 0.001:
+        tag = "🔶 Thang 40 chưa rõ môn nhân - xếp hạng bảo thủ"
+        if tag not in annotation:
+            annotation = f"{annotation} · {tag}" if annotation else tag
+    return annotation
+
+
+def _prepare_school_display(df):
+    display_df = df.copy()
+    if "Điểm của bạn" in display_df.columns:
+        display_df["Điểm của bạn"] = display_df.apply(_format_score_range, axis=1)
+    if "Điểm chuẩn" in display_df.columns:
+        display_df["Điểm chuẩn"] = display_df.apply(_format_cutoff, axis=1)
+    if "Chú thích" in display_df.columns:
+        display_df["Chú thích"] = display_df.apply(_format_annotation, axis=1)
+    for col in ["Thang_40", "Điểm min", "Delta"]:
+        if col in display_df.columns:
+            display_df = display_df.drop(columns=[col])
+
+    ordered = [
+        "Trường",
+        "Mã ngành",
+        "Tên ngành",
+        "Phương thức xét tuyển",
+        "Điểm chuẩn",
+        "Tổ hợp khớp",
+        "Điểm của bạn",
+        "Tier",
+        "Năm",
+        "Chú thích",
+        "Công thức",
+    ]
+    return display_df[[col for col in ordered if col in display_df.columns] + [col for col in display_df.columns if col not in ordered]]
+
+
+@st.dialog("Nhập thêm thông tin để xét thêm ngành", width="small")
+def _score_missing_inputs_dialog(missing_inputs: list[str]):
+    missing_html = "".join(f"<li>{html.escape(str(item))}</li>" for item in missing_inputs[:8])
+    if len(missing_inputs) > 8:
+        missing_html += f"<li>Còn {len(missing_inputs) - 8} mục khác.</li>"
+    st.markdown(
+        f"""
+        <div class="sa-missing-panel">
+            <p>Một số ngành/tổ hợp đang bị tạm loại vì thiếu dữ liệu:</p>
+            <ul>{missing_html}</ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_more, col_keep = st.columns(2)
+    with col_more:
+        if st.button("Nhập thêm ↑", key="sa_missing_more", type="primary", use_container_width=True):
+            st.session_state.sa_step = 1
+            st.session_state.sa_focus_missing_inputs = missing_inputs[:8]
+            st.session_state.sa_scroll_to_score_inputs = True
+            st.rerun()
+    with col_keep:
+        if st.button("Giữ kết quả hiện tại", key="sa_missing_keep", use_container_width=True):
+            st.session_state.sa_exam_missing_dismissed = True
+            st.rerun()
+
+
 def render_score_analysis_page():
     from utils.score_calculator import (
         MAIN_SUBJECTS, normalize_scores, get_top_k_combinations,
@@ -375,6 +666,22 @@ def render_score_analysis_page():
         st.session_state.sa_step = 1
     if "sa_scores" not in st.session_state:
         st.session_state.sa_scores = {}
+    if "sa_not_taken_subjects" not in st.session_state:
+        st.session_state.sa_not_taken_subjects = set()
+    if "sa_mode" not in st.session_state:
+        st.session_state.sa_mode = "exam"
+    if "sa_exam_result" not in st.session_state:
+        st.session_state.sa_exam_result = None
+    if "sa_transcript_result" not in st.session_state:
+        st.session_state.sa_transcript_result = None
+    if "sa_exam_missing_inputs" not in st.session_state:
+        st.session_state.sa_exam_missing_inputs = []
+    if "sa_exam_missing_dismissed" not in st.session_state:
+        st.session_state.sa_exam_missing_dismissed = False
+    if "sa_focus_missing_inputs" not in st.session_state:
+        st.session_state.sa_focus_missing_inputs = []
+    if "sa_scroll_to_score_inputs" not in st.session_state:
+        st.session_state.sa_scroll_to_score_inputs = False
     if "sa_result" not in st.session_state:
         st.session_state.sa_result = None
 
@@ -386,7 +693,7 @@ def render_score_analysis_page():
             st.session_state.sa_step = 1
             st.rerun()
     with col_title:
-        st.markdown("## 📊 Phân tích Học bạ & Gợi ý Trường")
+        st.markdown("## 📊 Phân tích điểm xét tuyển & Gợi ý Trường")
 
     # --- Step Wizard Bar ---
     step = st.session_state.sa_step
@@ -421,6 +728,8 @@ def render_score_analysis_page():
                         parsed = parse_scores_to_json(raw_ocr)
                         if parsed:
                             st.session_state.sa_scores = parsed
+                            st.session_state.sa_not_taken_subjects = set()
+                            _clear_score_input_widgets()
                             st.success(f"✅ AI đã nhận diện được {len(parsed)} môn! Kiểm tra và chỉnh sửa bên dưới.")
                             st.rerun()
                         else:
@@ -429,69 +738,91 @@ def render_score_analysis_page():
                         st.error("❌ Không đọc được file. Vui lòng thử lại hoặc nhập thủ công.")
 
         st.markdown("---")
+        st.markdown('<span id="sa-score-input-anchor"></span>', unsafe_allow_html=True)
         st.markdown("**Nhập điểm thủ công** *(thang 10)*")
+        focus_missing_inputs = st.session_state.get("sa_focus_missing_inputs", [])
+        missing_targets = _missing_input_targets(focus_missing_inputs)
+        if focus_missing_inputs:
+            st.info("Bạn đang bổ sung dữ liệu còn thiếu: " + ", ".join(focus_missing_inputs[:6]))
+        if st.session_state.get("sa_scroll_to_score_inputs"):
+            st.session_state.sa_scroll_to_score_inputs = False
+            _scroll_to_score_input_anchor()
 
         # --- Score Input Form ---
         existing = st.session_state.sa_scores
+        existing_not_taken = set(st.session_state.get("sa_not_taken_subjects", set()))
         input_scores = {}
+        not_taken_subjects = set()
+        invalid_score_inputs = []
 
         col_left, col_right = st.columns(2)
         for i, subj in enumerate(MAIN_SUBJECTS):
-            default_val = existing.get(subj, 0.0)
             target_col = col_left if i < 5 else col_right
             with target_col:
-                val = st.number_input(
-                    subj,
-                    min_value=0.0,
-                    max_value=10.0,
-                    value=float(default_val),
-                    step=0.1,
-                    format="%.1f",
-                    key=f"sa_input_{subj}",
-                )
-                input_scores[subj] = val
+                score, not_taken, valid = _render_subject_score_input(subj, existing, existing_not_taken)
+                if not valid:
+                    invalid_score_inputs.append(subj)
+                elif not_taken:
+                    not_taken_subjects.add(subj)
+                elif score is not None:
+                    input_scores[subj] = score
 
         # --- Ngoại ngữ phụ (tùy chọn) ---
         from utils.score_calculator import EXTRA_LANGUAGES
-        with st.expander("🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*"):
+        with st.expander(
+            "🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*",
+            expanded=missing_targets["language"],
+        ):
             st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
             lang_col1, lang_col2 = st.columns(2)
             for j, lang in enumerate(EXTRA_LANGUAGES):
-                default_lang = existing.get(lang, 0.0)
                 target_lang_col = lang_col1 if j < 3 else lang_col2
                 with target_lang_col:
-                    lang_val = st.number_input(
-                        lang,
-                        min_value=0.0,
-                        max_value=10.0,
-                        value=float(default_lang),
-                        step=0.1,
-                        format="%.1f",
-                        key=f"sa_input_{lang}",
-                    )
-                    if lang_val > 0:
-                        input_scores[lang] = lang_val
+                    score, not_taken, valid = _render_subject_score_input(lang, existing, existing_not_taken)
+                    if not valid:
+                        invalid_score_inputs.append(lang)
+                    elif not_taken:
+                        not_taken_subjects.add(lang)
+                    elif score is not None:
+                        input_scores[lang] = score
 
         # --- Năng khiếu (tùy chọn) ---
         from utils.score_calculator import EXTRA_APTITUDE
-        with st.expander("🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*"):
+        with st.expander(
+            "🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*",
+            expanded=missing_targets["aptitude"],
+        ):
             st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
             apt_col1, apt_col2 = st.columns(2)
-            for j, apt in enumerate(EXTRA_APTITUDE):
-                default_apt = existing.get(apt, 0.0)
+            aptitude_inputs = list(EXTRA_APTITUDE) + _EXTRA_APTITUDE_DETAIL_INPUTS
+            for j, apt in enumerate(aptitude_inputs):
                 target_apt_col = apt_col1 if j % 2 == 0 else apt_col2
                 with target_apt_col:
-                    apt_val = st.number_input(
-                        apt,
-                        min_value=0.0,
-                        max_value=10.0,
-                        value=float(default_apt),
-                        step=0.1,
-                        format="%.1f",
-                        key=f"sa_input_{apt}",
-                    )
-                    if apt_val > 0:
-                        input_scores[apt] = apt_val
+                    score, not_taken, valid = _render_subject_score_input(apt, existing, existing_not_taken)
+                    if not valid:
+                        invalid_score_inputs.append(apt)
+                    elif not_taken:
+                        not_taken_subjects.add(apt)
+                    elif score is not None:
+                        input_scores[apt] = score
+
+        with st.expander("📜 Chứng chỉ ngoại ngữ (nếu có)", expanded=missing_targets["certificate"]):
+            st.caption("Nhập nếu ngành yêu cầu chứng chỉ IELTS/TOEFL/TOEIC.")
+            cert_col1, cert_col2, cert_col3 = st.columns(3)
+            with cert_col1:
+                _render_ielts_input()
+            with cert_col2:
+                st.number_input("TOEFL iBT", 0, 120, 0, key="sa_toefl")
+            with cert_col3:
+                st.number_input("TOEIC", 0, 990, 0, key="sa_toeic")
+
+        with st.expander("📋 Thông tin THPT bổ sung (nếu ngành yêu cầu)", expanded=missing_targets["school_record"]):
+            st.caption("Một số ngành yêu cầu ĐTB lớp 12 hoặc học lực.")
+            gpa_col1, gpa_col2 = st.columns(2)
+            with gpa_col1:
+                st.number_input("ĐTB lớp 12 tổng", 0.0, 10.0, 0.0, 0.1, key="sa_gpa12")
+            with gpa_col2:
+                st.selectbox("Học lực lớp 12", ["Không chọn", "Giỏi", "Khá", "Trung bình"], key="sa_rank12")
 
         st.markdown("---")
 
@@ -544,15 +875,18 @@ def render_score_analysis_page():
         # --- Nút tiếp tục ---
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Tiếp tục →", key="sa_next_1", type="primary", use_container_width=True):
-            # Lọc chỉ giữ môn có điểm > 0
-            filled = {k: v for k, v in input_scores.items() if v > 0}
-            if len(filled) < 3:
+            filled = dict(input_scores)
+            if invalid_score_inputs:
+                st.error("❌ Vui lòng kiểm tra lại điểm nhập cho: " + ", ".join(invalid_score_inputs[:6]))
+            elif len(filled) < 3:
                 st.error("❌ Vui lòng nhập ít nhất 3 môn để tính tổ hợp khối thi.")
             else:
                 st.session_state.sa_scores = filled
+                st.session_state.sa_not_taken_subjects = not_taken_subjects
                 st.session_state.sa_bonus_val = raw_bonus
                 st.session_state.sa_kv_selected = selected_kv
                 st.session_state.sa_ut_selected = selected_ut
+                st.session_state.sa_focus_missing_inputs = []
                 st.session_state.sa_step = 2
                 st.rerun()
 
@@ -581,21 +915,21 @@ def render_score_analysis_page():
 
         st.divider()
 
-        methods = st.multiselect(
+        mode_index = 0 if st.session_state.get("sa_mode", "exam") == "exam" else 1
+        mode_label = st.radio(
             "Chọn phương thức xét tuyển:",
-            options=[
-                "Xét điểm Học bạ THPT",
-                "Xét điểm thi THPT",
-            ],
-            default=["Xét điểm Học bạ THPT", "Xét điểm thi THPT"],
-            key="sa_methods",
+            [_EXAM_MODE_LABEL, _TRANSCRIPT_MODE_LABEL],
+            index=mode_index,
+            key="sa_mode_radio",
+            horizontal=True,
         )
+        st.session_state.sa_mode = _selected_score_mode()
 
-        # Cảnh báo quy chế 2026
-        st.warning(
-            "⚠️ **Lưu ý Quy chế 2026:** Từ năm 2026, không xét riêng học bạ. "
-            "Dữ liệu điểm chuẩn Học bạ từ 2025 trở về trước chỉ mang tính tham khảo."
-        )
+        if mode_label == _TRANSCRIPT_MODE_LABEL:
+            st.warning(
+                "⚠️ **Lưu ý Quy chế 2026:** Từ năm 2026, không xét riêng học bạ. "
+                "Dữ liệu điểm chuẩn Học bạ từ 2025 trở về trước chỉ mang tính tham khảo."
+            )
 
         top_k = st.selectbox(
             "Số trường gợi ý (Top K):",
@@ -612,23 +946,30 @@ def render_score_analysis_page():
                 st.rerun()
         with col_next2:
             if st.button("🚀 Phân tích ngay!", key="sa_analyze", type="primary", use_container_width=True):
-                if not methods:
-                    st.error("Vui lòng chọn ít nhất 1 phương thức xét tuyển.")
-                else:
-                    with st.spinner("⏳ Đang quét 20,000+ dòng dữ liệu điểm chuẩn..."):
-                        result = find_top_k_schools(
-                            student_scores=st.session_state.sa_scores,
-                            methods=methods,
-                            k=top_k,
-                            bonus=bonus,
-                        )
-                        st.session_state.sa_result = result
-                        st.session_state.sa_step = 3
-                        st.rerun()
+                mode = _selected_score_mode()
+                methods = ["Xét điểm thi THPT"] if mode == "exam" else ["Xét điểm Học bạ THPT"]
+                payload = _build_score_analysis_payload(mode)
+                with st.spinner("⏳ Đang quét dữ liệu điểm chuẩn..."):
+                    result = find_top_k_schools(
+                        student_scores=payload,
+                        methods=methods,
+                        k=top_k,
+                        bonus=bonus,
+                    )
+                    st.session_state.sa_mode = mode
+                    if mode == "exam":
+                        st.session_state.sa_exam_result = result
+                        st.session_state.sa_exam_missing_inputs = result.get("missing_inputs", [])
+                        st.session_state.sa_exam_missing_dismissed = False
+                    else:
+                        st.session_state.sa_transcript_result = result
+                    st.session_state.sa_result = result
+                    st.session_state.sa_step = 3
+                    st.rerun()
 
     # ========== STEP 3: KẾT QUẢ ==========
     elif step == 3:
-        result = st.session_state.sa_result
+        result = _current_score_analysis_result() or st.session_state.sa_result
         if not result:
             st.error("Không có kết quả. Vui lòng quay lại.")
             return
@@ -643,6 +984,14 @@ def render_score_analysis_page():
         # --- Warnings ---
         for w in result.get("warnings", []):
             st.warning(w)
+
+        missing_inputs = result.get("missing_inputs", [])
+        if (
+            st.session_state.get("sa_mode") == "exam"
+            and missing_inputs
+            and not st.session_state.get("sa_exam_missing_dismissed", False)
+        ):
+            _score_missing_inputs_dialog(missing_inputs)
 
         # --- Phân tích điểm mạnh ---
         strength = result.get("strength", {})
@@ -671,25 +1020,23 @@ def render_score_analysis_page():
                     is_below = combo.get("below_threshold", False)
                     
                     if is_diem_liet:
-                        border_color = "#8b0000" # Dark red for paralyzing score
-                        warning_html = "<div style='color:#8b0000;font-size:0.75em;font-weight:bold;'>🚨 BỊ ĐIỂM LIỆT</div>"
+                        status_class = "danger"
+                        warning_html = '<div class="sa-combo-card-alert">🚨 BỊ ĐIỂM LIỆT</div>'
                     elif is_below:
-                        border_color = "#ff4b4b" # Standard red for below 15
-                        warning_html = "<div style='color:#ff4b4b;font-size:0.75em;'>⚠️ Dưới ngưỡng 15</div>"
+                        status_class = "warning"
+                        warning_html = '<div class="sa-combo-card-alert">⚠️ Dưới ngưỡng 15</div>'
                     else:
-                        border_color = "#00c853" # Green for good
+                        status_class = "success"
                         warning_html = ""
-                        
+                    combo_code = html.escape(str(combo["code"]))
+                    combo_total = html.escape(str(combo["total"]))
+                    combo_subjects = html.escape(" + ".join(combo["subjects"]))
+
                     st.markdown(f"""
-                    <div style="border: 2px solid {border_color}; border-radius: 12px; 
-                                padding: 16px; text-align: center; margin-bottom: 8px;">
-                        <div style="font-size: 1.4em; font-weight: 700;">{combo['code']}</div>
-                        <div style="font-size: 1.8em; font-weight: 800; color: {border_color};">
-                            {combo['total']}
-                        </div>
-                        <div style="font-size: 0.8em; opacity: 0.7;">
-                            {' + '.join(combo['subjects'])}
-                        </div>
+                    <div class="sa-combo-card sa-combo-card-{status_class}">
+                        <div class="sa-combo-card-code">{combo_code}</div>
+                        <div class="sa-combo-card-score">{combo_total}</div>
+                        <div class="sa-combo-card-subjects">{combo_subjects}</div>
                         {warning_html}
                     </div>
                     """, unsafe_allow_html=True)
@@ -698,33 +1045,22 @@ def render_score_analysis_page():
         st.markdown(f"### 🎓 Top {len(result.get('matched_schools', []))} Trường Phù hợp")
         df = result.get("matched_schools")
         if df is not None and not df.empty:
-            # Format display for Thang_40
-            display_df = df.copy()
-            if "Thang_40" in display_df.columns:
-                display_df["Điểm chuẩn"] = display_df.apply(
-                    lambda r: f"{r['Điểm chuẩn']:.2f} (x2)" if r.get("Thang_40") else f"{r['Điểm chuẩn']:.2f}", 
-                    axis=1
-                )
-                display_df = display_df.drop(columns=["Thang_40"])
-                
-            if "Điểm min" in display_df.columns:
-                display_df["Điểm của bạn"] = display_df.apply(
-                    lambda r: f"{r['Điểm min']:.2f} - {r['Điểm của bạn']:.2f} (?)" if r.get("Điểm min") != r.get("Điểm của bạn") else f"{r['Điểm của bạn']:.2f}",
-                    axis=1
-                )
-                display_df = display_df.drop(columns=["Điểm min"])
-                
-            # Ẩn cột Delta khỏi giao diện người dùng theo yêu cầu
-            if "Delta" in display_df.columns:
-                display_df = display_df.drop(columns=["Delta"])
+            display_df = _prepare_school_display(df)
                 
             st.dataframe(
                 display_df,
                 use_container_width=True,
                 hide_index=True,
+                column_config={
+                    "Chú thích": st.column_config.TextColumn("Chú thích", width="large"),
+                    "Công thức": st.column_config.TextColumn("Công thức", width="large"),
+                    "Tên ngành": st.column_config.TextColumn("Tên ngành", width="medium"),
+                },
             )
             st.caption(f"📈 Tổng cộng tìm thấy **{result.get('total_found', 0)}** trường/ngành phù hợp.")
-            st.info("💡 **Lưu ý Thang 40:** Các trường có điểm chuẩn > 30 (dấu `x2`) nhân hệ số 2 môn chính. Do quy định môn nhân đôi tùy thuộc vào đề án từng trường, hệ thống hiển thị **Khoảng điểm (Thấp nhất - Cao nhất)** thay vì phỏng đoán. Bạn hãy tự đối chiếu môn nhân đôi của trường để biết chính xác điểm của mình nằm ở đâu trong khoảng này.")
+            st.caption("📐 = Nhân hệ số · 📊 = Thang điểm · ⚠️ = Điều kiện · 📜 = Chứng chỉ · 📋 = Học bạ")
+            if st.session_state.get("sa_mode") == "exam":
+                st.info("💡 Với dòng thang 40 chưa rõ môn nhân, hệ thống hiển thị khoảng điểm và xếp hạng theo cận dưới.")
         else:
             st.info("Không tìm thấy trường phù hợp. Thử mở rộng phương thức xét tuyển hoặc kiểm tra lại điểm.")
 
@@ -747,13 +1083,20 @@ def render_score_analysis_page():
         with col_a1:
             if st.button("🔄 Phân tích lại", key="sa_retry", use_container_width=True):
                 st.session_state.sa_step = 1
+                if st.session_state.get("sa_mode") == "exam":
+                    st.session_state.sa_exam_result = None
+                    st.session_state.sa_exam_missing_inputs = []
+                    st.session_state.sa_exam_missing_dismissed = False
+                else:
+                    st.session_state.sa_transcript_result = None
                 st.session_state.sa_result = None
                 st.rerun()
         with col_a2:
             if st.button("💬 Hỏi thêm AI", key="sa_to_chat", use_container_width=True, type="primary"):
                 # Inject context vào chat
                 if df is not None and not df.empty:
-                    context_msg = f"[Kết quả phân tích học bạ]\nĐiểm: {scores}\nTop trường: {df[['Trường','Tên ngành','Điểm chuẩn','Delta','Tier']].to_string(index=False)}"
+                    context_cols = [col for col in ["Trường", "Tên ngành", "Điểm chuẩn", "Delta", "Tier", "Năm"] if col in df.columns]
+                    context_msg = f"[Kết quả phân tích xét tuyển]\nĐiểm: {scores}\nTop trường: {df[context_cols].to_string(index=False)}"
                     if "messages" not in st.session_state:
                         st.session_state.messages = []
                     st.session_state.messages.append({"role": "assistant", "content": context_msg})
