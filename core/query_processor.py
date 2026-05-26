@@ -7,6 +7,7 @@ from agents.counselor import (
     parse_cv_scores,
     retrieve_main_data,
 )
+from chat_db import save_searched_university
 
 def _dataframe_to_history_text(dataframe) -> str:
     try:
@@ -69,6 +70,17 @@ def _process_query(query: str, uploaded_cv=None):
     # === BƯỚC 1: ROUTER PHÂN LOẠI ===
     classification = classify_query(query, has_file, chat_history)
     intent = classification["intent"]
+
+    # === AUTO-TRACK: Ghi nhận trường ĐH khi Recommender xử lý ===
+    if intent == "RECOMMENDER" and classification.get("school", "ALL") != "ALL":
+        user = st.session_state.get("user")
+        if user:
+            save_searched_university(
+                user_id=user["id"],
+                school_name=classification["school"],
+                query_text=query,
+                session_id=st.session_state.get("session_id", ""),
+            )
 
     if classification.get("error_message"):
         st.warning(classification["error_message"])

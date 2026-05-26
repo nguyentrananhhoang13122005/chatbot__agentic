@@ -1358,6 +1358,205 @@ def load_custom_css():
         background: var(--surface)!important;
         color: var(--text)!important;
     }
+
+    /* ============================================================
+       PROFILE PAGE
+       ============================================================ */
+
+    /* --- Login Prompt (unauthenticated) --- */
+    .profile-login-prompt {
+        text-align: center;
+        padding: var(--sp-32);
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--riso-shadow);
+        max-width: 500px;
+        margin: 60px auto;
+    }
+    .profile-login-prompt h2 {
+        font-family: var(--font-sans);
+        font-weight: 800;
+        color: var(--text);
+        text-transform: uppercase;
+        margin-bottom: var(--sp-8);
+    }
+    .profile-login-prompt p {
+        color: var(--text);
+        opacity: 0.7;
+        font-size: 16px;
+    }
+
+    /* --- User Info Card --- */
+    .profile-header {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-24);
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--sp-24);
+        box-shadow: 4px 4px 0px var(--secondary);
+        transition: all 0.3s ease;
+    }
+    .profile-header:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0px var(--primary);
+    }
+    .profile-avatar {
+        width: 72px;
+        height: 72px;
+        min-width: 72px;
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        border: 3px solid var(--border);
+        box-shadow: 3px 3px 0px var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        font-weight: 900;
+        color: var(--surface);
+        font-family: var(--font-sans);
+    }
+    .profile-info {
+        flex: 1;
+    }
+    .profile-name {
+        font-family: var(--font-sans);
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: -0.5px;
+        margin-bottom: 2px;
+    }
+    .profile-email {
+        font-family: var(--font-mono);
+        font-size: 14px;
+        color: var(--text);
+        opacity: 0.6;
+        margin-bottom: var(--sp-8);
+    }
+    .profile-meta {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text);
+        opacity: 0.5;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* --- Section Header --- */
+    .profile-section-header {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-12);
+        padding-bottom: var(--sp-8);
+        border-bottom: 2px solid var(--border);
+        margin-bottom: var(--sp-16);
+    }
+    .profile-section-icon {
+        font-size: 24px;
+    }
+    .profile-section-title {
+        font-family: var(--font-mono);
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        flex: 1;
+    }
+    .profile-section-count {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--surface);
+        background: var(--secondary);
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        border: 1.5px solid var(--border);
+    }
+
+    /* --- University History Card --- */
+    .uni-history-card {
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--sp-16);
+        margin-bottom: var(--sp-4);
+        box-shadow: 3px 3px 0px var(--border);
+        transition: all 0.2s ease;
+    }
+    .uni-history-card:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 5px 5px 0px var(--primary);
+        border-color: var(--primary);
+    }
+    .uni-history-header {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-12);
+    }
+    .uni-history-icon {
+        font-size: 28px;
+        flex-shrink: 0;
+        filter: drop-shadow(1px 1px 0px var(--primary));
+    }
+    .uni-history-details {
+        flex: 1;
+        min-width: 0;
+    }
+    .uni-history-name {
+        font-family: var(--font-sans);
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--text);
+        text-transform: uppercase;
+        letter-spacing: -0.3px;
+        margin-bottom: 4px;
+    }
+    .uni-history-query {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--text);
+        opacity: 0.55;
+        font-style: italic;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .uni-history-time {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text);
+        opacity: 0.4;
+        letter-spacing: 0.3px;
+    }
+
+    /* --- Empty State --- */
+    .uni-empty-state {
+        text-align: center;
+        padding: var(--sp-32);
+        background: var(--surface);
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-md);
+        margin: var(--sp-16) 0;
+    }
+    .uni-empty-state p {
+        font-family: var(--font-sans);
+        color: var(--text);
+        opacity: 0.6;
+        font-size: 15px;
+        margin: 4px 0;
+    }
+    .uni-empty-state strong {
+        font-weight: 700;
+        color: var(--text);
+        opacity: 0.8;
+    }
     """
     # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)
     # Also add robust fallback stack for networks that block Google Fonts
