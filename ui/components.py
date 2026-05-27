@@ -653,11 +653,11 @@ def _score_missing_inputs_dialog(missing_inputs: list[str]):
             st.session_state.sa_step = 1
             st.session_state.sa_focus_missing_inputs = missing_inputs[:8]
             st.session_state.sa_scroll_to_score_inputs = True
-            st.rerun()
+            st.rerun(scope="app")
     with col_keep:
         if st.button("Giữ kết quả hiện tại", key="sa_missing_keep", use_container_width=True):
             st.session_state.sa_exam_missing_dismissed = True
-            st.rerun()
+            st.rerun(scope="app")
 
 
 def render_score_analysis_page():
@@ -698,22 +698,36 @@ def render_score_analysis_page():
         if st.button("← Trang chủ", key="sa_back_home"):
             st.session_state.page = "home"
             st.session_state.sa_step = 1
+            st.session_state.sa_max_step = 1
             st.rerun()
     with col_title:
         st.markdown("## 📊 Phân tích điểm xét tuyển & Gợi ý Trường")
 
     # --- Step Wizard Bar ---
     step = st.session_state.sa_step
+    if "sa_max_step" not in st.session_state:
+        st.session_state.sa_max_step = step
+    st.session_state.sa_max_step = max(st.session_state.sa_max_step, step)
+
     steps = ["① Nhập điểm", "② Phương thức", "③ Kết quả AI"]
     step_cols = st.columns(3)
     for i, (sc, label) in enumerate(zip(step_cols, steps)):
         with sc:
+            is_unlocked = (i + 1 <= st.session_state.sa_max_step) or (i + 1 == 3 and st.session_state.get("sa_result") is not None)
+            
             if i + 1 < step:
-                st.success(f"✅ {label}")
+                if st.button(f"✅ {label}", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để quay lại"):
+                    st.session_state.sa_step = i + 1
+                    st.rerun()
             elif i + 1 == step:
-                st.info(f"👉 {label}")
+                st.button(f"👉 {label}", key=f"step_btn_{i}", type="primary", use_container_width=True)
             else:
-                st.markdown(f"⬜ {label}")
+                if is_unlocked:
+                    if st.button(f"⬜ {label}", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để đi tới"):
+                        st.session_state.sa_step = i + 1
+                        st.rerun()
+                else:
+                    st.button(f"⬜ {label}", key=f"step_btn_{i}", disabled=True, use_container_width=True)
 
     st.divider()
 
@@ -972,6 +986,7 @@ def render_score_analysis_page():
                         st.session_state.sa_transcript_result = result
                     st.session_state.sa_result = result
                     st.session_state.sa_step = 3
+                    st.session_state.pop("sa_ai_analysis_text", None)
                     st.rerun()
 
     # ========== STEP 3: KẾT QUẢ ==========
@@ -1074,15 +1089,20 @@ def render_score_analysis_page():
         # --- Phân tích AI ---
         st.markdown("### 🤖 Phân tích Chuyên gia AI")
         if df is not None and not df.empty:
-            with st.spinner("⏳ AI đang phân tích..."):
-                try:
-                    stream = generate_analysis_stream(result)
-                    if stream:
-                        response_text = st.write_stream(stream)
-                    else:
-                        st.info("AI không thể phân tích lúc này. Vui lòng tham khảo bảng dữ liệu ở trên.")
-                except Exception as e:
-                    st.warning(f"⚠️ AI tạm thời không khả dụng: {e}")
+            if "sa_ai_analysis_text" in st.session_state and st.session_state.sa_ai_analysis_text:
+                st.markdown(st.session_state.sa_ai_analysis_text)
+            else:
+                if st.button("✨ Nhận Phân tích từ Chuyên gia AI", key="sa_btn_ai_analysis"):
+                    with st.spinner("⏳ AI đang phân tích..."):
+                        try:
+                            stream = generate_analysis_stream(result)
+                            if stream:
+                                response_text = st.write_stream(stream)
+                                st.session_state.sa_ai_analysis_text = response_text
+                            else:
+                                st.info("AI không thể phân tích lúc này. Vui lòng tham khảo bảng dữ liệu ở trên.")
+                        except Exception as e:
+                            st.warning(f"⚠️ AI tạm thời không khả dụng: {e}")
 
         # --- Action buttons ---
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1090,6 +1110,7 @@ def render_score_analysis_page():
         with col_a1:
             if st.button("🔄 Phân tích lại", key="sa_retry", use_container_width=True):
                 st.session_state.sa_step = 1
+                st.session_state.sa_max_step = 1
                 if st.session_state.get("sa_mode") == "exam":
                     st.session_state.sa_exam_result = None
                     st.session_state.sa_exam_missing_inputs = []
@@ -1097,6 +1118,7 @@ def render_score_analysis_page():
                 else:
                     st.session_state.sa_transcript_result = None
                 st.session_state.sa_result = None
+                st.session_state.pop("sa_ai_analysis_text", None)
                 st.rerun()
         with col_a2:
             if st.button("💬 Hỏi thêm AI", key="sa_to_chat", use_container_width=True, type="primary"):
@@ -1113,6 +1135,7 @@ def render_score_analysis_page():
             if st.button("🏠 Trang chủ", key="sa_home", use_container_width=True):
                 st.session_state.page = "home"
                 st.session_state.sa_step = 1
+                st.session_state.sa_max_step = 1
                 st.rerun()
 
 
