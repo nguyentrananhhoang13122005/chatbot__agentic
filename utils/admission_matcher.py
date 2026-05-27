@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 import os
 import re
 
@@ -28,6 +29,9 @@ from utils.score_calculator import (
     get_top_k_combinations,
     normalize_scores,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def find_top_k_schools_exam(
@@ -419,7 +423,7 @@ def _write_unresolved_report(unresolved_rules: list[tuple[AdmissionRow, object]]
                     ]
                 )
     except OSError as exc:
-        print(f"WARNING [AdmissionMatcher]: Could not write unresolved admission report: {exc}")
+        LOGGER.warning("Could not write unresolved admission report: %s", exc)
 
 
 def _format_unresolved_cutoff(row: AdmissionRow, rule) -> str:

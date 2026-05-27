@@ -13,7 +13,7 @@ from utils.admission_models import AdmissionRule, Condition, Multiplier
 from utils.score_calculator import normalize_subject_name
 
 
-PARSER_VERSION = "regex-v1"
+PARSER_VERSION = "regex-v2"
 ALLOWED_CACHE_MODES = {"normal_30", "weighted_40", "weighted_convert_30", "weighted_40_range", "unsupported"}
 ALLOWED_CACHE_CONFIDENCES = {"high", "medium", "regex_fail", "unsupported"}
 
@@ -82,6 +82,13 @@ INFLUENTIAL_KEYWORDS = (
     "năng khiếu",
 )
 
+ACADEMIC_RANK_VALUES = {
+    "trung bình": 1.0,
+    "khá": 2.0,
+    "giỏi": 3.0,
+    "tốt": 3.0,
+}
+
 
 def normalize_note(raw: str | None) -> str:
     """Normalize a raw note without dropping admission information."""
@@ -96,6 +103,7 @@ def normalize_note(raw: str | None) -> str:
         r"\bNK\b": "Năng khiếu",
         r"\bĐTB\b": "Điểm trung bình",
         r"\bDTB\b": "Điểm trung bình",
+        r"\bHL12\b": "Học lực lớp 12",
         r"\bHĐ\b": "Học lực",
         r"\bSKĐA\b": "SKĐA",
         r"\bHHMT\b": "HHMT",
@@ -135,6 +143,18 @@ def parse_admission_rule(raw_note: str | None, row_context: Any = None) -> Admis
             mode="unsupported",
             confidence="unsupported",
             unsupported_reason="scale_35",
+            raw_note=raw,
+            data_year=data_year,
+        )
+
+    unsupported_note_reason = _unsupported_note_reason(lower)
+    if unsupported_note_reason:
+        return AdmissionRule(
+            score_scale=None,
+            converted_to_30=False,
+            mode="unsupported",
+            confidence="unsupported",
+            unsupported_reason=unsupported_note_reason,
             raw_note=raw,
             data_year=data_year,
         )
@@ -376,6 +396,10 @@ def _parse_compound_condition(text: str) -> list[Condition]:
 
 def _parse_single_condition(text: str) -> Condition | None:
     lower = text.lower()
+    academic_rank = _parse_academic_rank_condition(lower)
+    if academic_rank:
+        return academic_rank
+
     cert = re.search(r"\b(ielts|toefl|toeic)\b\s*(?:≥|>|:|đạt từ)?\s*(\d+(?:[.,]\d+)?)", lower)
     if cert:
         return Condition(
@@ -423,6 +447,25 @@ def _parse_single_condition(text: str) -> Condition | None:
     if generic_aptitude and "năng khiếu" in lower:
         return Condition("aptitude_score", None, ">=", _parse_number(generic_aptitude.group(1)), "aptitude")
     return None
+
+
+def _parse_academic_rank_condition(lower: str) -> Condition | None:
+    match = re.search(
+        r"học lực(?:\s+lớp\s*12)?(?:\s+(?:xếp loại|loại|mức))?\s+"
+        r"(?:từ\s+)?(?P<rank>giỏi|khá|trung bình|tốt)(?:\s+trở lên)?",
+        lower,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    rank = match.group("rank").lower()
+    return Condition(
+        condition_type="academic_rank",
+        subject="Học lực lớp 12",
+        operator=">=",
+        value=ACADEMIC_RANK_VALUES[rank],
+        source="school_record",
+    )
 
 
 def _condition_for_subject(subject_text: str, value: str) -> Condition | None:
@@ -480,6 +523,16 @@ def _looks_influential(lower_note: str) -> bool:
     return any(keyword in lower_note for keyword in INFLUENTIAL_KEYWORDS)
 
 
+def _unsupported_note_reason(lower_note: str) -> str | None:
+    if re.search(r"\b(?:đgnl|dgnl)\b|đánh giá năng lực", lower_note, flags=re.IGNORECASE):
+        return "external_assessment_component"
+    if re.search(r"\bccnnqt\b|chứng chỉ ngoại ngữ quốc tế", lower_note, flags=re.IGNORECASE):
+        return "certificate_component_without_threshold"
+    if "học bạ lớp 12 theo tổ hợp" in lower_note:
+        return "transcript_combo_component"
+    return None
+
+
 def _context_float(row_context: Any, *names: str) -> float | None:
     value = _context_value(row_context, *names)
     try:
@@ -512,6 +565,12 @@ def _context_value(row_context: Any, *names: str) -> Any:
 
 
 def _condition_label(condition: Condition) -> str:
+    if condition.condition_type == "academic_rank":
+        subject = condition.subject or "Học lực lớp 12"
+        label = f"{subject} {condition.operator} {_academic_rank_label(condition.value)}"
+        if condition.alternative:
+            return f"{label} hoặc {_condition_label(condition.alternative)}"
+        return label
     subject = condition.subject or "Điều kiện"
     if condition.alternative:
         return f"{subject} {condition.operator} {_format_number(condition.value)} hoặc {_condition_label(condition.alternative)}"
@@ -521,6 +580,11 @@ def _condition_label(condition: Condition) -> str:
 def _format_number(value: float) -> str:
     text = f"{value:.2f}".rstrip("0").rstrip(".")
     return text or "0"
+
+
+def _academic_rank_label(value: float) -> str:
+    labels = {1.0: "Trung bình", 2.0: "Khá", 3.0: "Giỏi"}
+    return labels.get(float(value), _format_number(value))
 
 
 def _condition_from_dict(data: dict[str, Any]) -> Condition:

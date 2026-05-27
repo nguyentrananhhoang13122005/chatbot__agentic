@@ -8,6 +8,19 @@ import re
 from utils.admission_models import AdmissionRule, Condition, EligibilityResult, StudentProfile
 
 
+ACADEMIC_RANK_VALUES = {
+    "trung bình": 1.0,
+    "khá": 2.0,
+    "giỏi": 3.0,
+    "tốt": 3.0,
+}
+ACADEMIC_RANK_LABELS = {
+    1.0: "Trung bình",
+    2.0: "Khá",
+    3.0: "Giỏi",
+}
+
+
 def evaluate_eligibility(rule: AdmissionRule, profile: StudentProfile) -> EligibilityResult:
     """Evaluate all hard conditions in a parsed admission rule."""
     if rule.unsupported_reason:
@@ -86,6 +99,8 @@ def _profile_value(condition: Condition, profile: StudentProfile) -> float | Non
         if parsed:
             return profile.gpa_subject_12.get(parsed)
         return profile.gpa_12
+    if condition.condition_type == "academic_rank":
+        return _academic_rank_value(profile.academic_rank_12)
     if condition.condition_type == "aptitude_score":
         if subject:
             return profile.aptitude_scores.get(subject) or profile.exam_scores.get(subject)
@@ -104,6 +119,8 @@ def _extract_subject_from_school_record(label: str) -> str | None:
 
 
 def _condition_label(condition: Condition) -> str:
+    if condition.condition_type == "academic_rank":
+        return f"Học lực lớp 12 {condition.operator} {_academic_rank_label(condition.value)}"
     return f"{condition.subject or 'Điều kiện'} {condition.operator} {condition.value:g}"
 
 
@@ -112,6 +129,18 @@ def _missing_label(condition: Condition) -> str:
         return f"Điểm {condition.subject}"
     if condition.condition_type == "school_record":
         return condition.subject or "ĐTB lớp 12"
+    if condition.condition_type == "academic_rank":
+        return "Học lực lớp 12"
     if condition.condition_type == "aptitude_score":
         return condition.subject or "Điểm năng khiếu"
     return condition.subject or "Điểm môn bắt buộc"
+
+
+def _academic_rank_value(rank: str | None) -> float | None:
+    if not rank:
+        return None
+    return ACADEMIC_RANK_VALUES.get(str(rank).strip().lower())
+
+
+def _academic_rank_label(value: float) -> str:
+    return ACADEMIC_RANK_LABELS.get(float(value), f"{value:g}")

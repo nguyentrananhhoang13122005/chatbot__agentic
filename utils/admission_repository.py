@@ -22,6 +22,8 @@ DEFAULT_CSV_PATH = Path("data/data_diem_chuan_verified.csv")
 
 @dataclass(frozen=True)
 class AdmissionRow:
+    """Normalized projection of one verified admission cutoff row."""
+
     truong: str
     ma_nganh: str
     ten_nganh: str
@@ -82,14 +84,16 @@ class AdmissionRepository:
             where.append('"Năm_Num" IN ({})'.format(",".join("?" for _ in year_list)))
             params.extend(year_list)
 
-        sql = f"""
-            SELECT "Trường", "Mã ngành", "Tên ngành", "Năm_Num",
-                   "Phương thức xét tuyển", method_key, "Điểm chuẩn_Num",
-                   "Tổ hợp môn", "Ghi chú", row_hash
-            FROM diem_chuan_verified
-            WHERE {" AND ".join(where)}
-            ORDER BY "Năm_Num" DESC, "Trường", "Tên ngành"
-        """
+        where_clause = " AND ".join(where)
+        sql = (
+            'SELECT "Trường", "Mã ngành", "Tên ngành", "Năm_Num", '
+            '"Phương thức xét tuyển", method_key, "Điểm chuẩn_Num", '
+            '"Tổ hợp môn", "Ghi chú", row_hash '
+            "FROM diem_chuan_verified "
+            # WHERE fragments are fixed strings; values are parameterized.
+            f"WHERE {where_clause} "  # nosec B608
+            'ORDER BY "Năm_Num" DESC, "Trường", "Tên ngành"'
+        )
         with self._connect() as conn:
             for row in conn.execute(sql, params):
                 item = self._row_from_sqlite(row)
@@ -168,13 +172,14 @@ class AdmissionRepository:
             for index in range(0, len(hashes), 500):
                 chunk = hashes[index : index + 500]
                 placeholders = ",".join("?" for _ in chunk)
-                sql = f"""
-                    SELECT row_hash, rule_json
-                    FROM admission_rule_cache
-                    WHERE parser_version = ?
-                      AND data_version = ?
-                      AND row_hash IN ({placeholders})
-                """
+                sql = (
+                    "SELECT row_hash, rule_json "
+                    "FROM admission_rule_cache "
+                    "WHERE parser_version = ? "
+                    "AND data_version = ? "
+                    # Dynamic placeholders are bound through sqlite parameters.
+                    f"AND row_hash IN ({placeholders})"  # nosec B608
+                )
                 params = [parser_version, data_version, *chunk]
                 for row in conn.execute(sql, params):
                     result[str(row["row_hash"])] = str(row["rule_json"])

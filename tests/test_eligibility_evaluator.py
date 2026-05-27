@@ -35,3 +35,14 @@ def test_certificate_missing_is_unknown():
     result = evaluate_eligibility(_rule(condition), StudentProfile())
     assert result.status == "unknown"
     assert "IELTS" in result.missing_inputs[0]
+
+
+def test_academic_rank_condition_pass_fail_unknown():
+    condition = Condition("academic_rank", "Học lực lớp 12", ">=", 2.0, "school_record")
+
+    assert evaluate_eligibility(_rule(condition), StudentProfile(academic_rank_12="Giỏi")).status == "eligible"
+    assert evaluate_eligibility(_rule(condition), StudentProfile(academic_rank_12="Trung bình")).status == "failed"
+
+    result = evaluate_eligibility(_rule(condition), StudentProfile())
+    assert result.status == "unknown"
+    assert "Học lực lớp 12" in result.missing_inputs

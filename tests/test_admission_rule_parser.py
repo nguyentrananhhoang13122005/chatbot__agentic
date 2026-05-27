@@ -134,3 +134,33 @@ def test_or_multiplier_does_not_create_unknown_duplicate_multiplier():
     rule = parse_admission_rule("Anh ≥ 5.50 hoặc Trung ≥ 5.50, Anh hoặc Trung nhân 2")
     assert len(rule.multipliers) == 1
     assert rule.multipliers[0].candidates == ["Tiếng Anh", "Tiếng Trung"]
+
+
+def test_external_assessment_notes_are_unsupported():
+    rule = parse_admission_rule("Kết hợp điểm thi THPT và điểm ĐGNL BCA")
+
+    assert rule.mode == "unsupported"
+    assert rule.confidence == "unsupported"
+    assert rule.unsupported_reason == "external_assessment_component"
+
+
+def test_certificate_component_without_threshold_is_unsupported():
+    rule = parse_admission_rule("Xét 2 môn thi TN và CCNNQT")
+
+    assert rule.mode == "unsupported"
+    assert rule.unsupported_reason == "certificate_component_without_threshold"
+
+
+def test_transcript_combo_component_is_unsupported_for_exam_mode():
+    rule = parse_admission_rule("Học bạ lớp 12 theo tổ hợp 3 môn")
+
+    assert rule.mode == "unsupported"
+    assert rule.unsupported_reason == "transcript_combo_component"
+
+
+def test_academic_rank_condition_is_parsed_and_annotated():
+    rule = parse_admission_rule("HL12 khá")
+
+    assert rule.conditions[0].condition_type == "academic_rank"
+    assert rule.conditions[0].value == 2.0
+    assert "Học lực lớp 12 >= Khá" in build_annotation(rule)
