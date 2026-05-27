@@ -37,6 +37,7 @@ SKILL.md
 # === DEBUG & TEMP FILES ===
 debug_*.jpg
 debug_*.png
+logs/
 /test_*.py
 !tests/
 !tests/**

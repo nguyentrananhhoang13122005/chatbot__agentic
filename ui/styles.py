@@ -1359,6 +1359,55 @@ def load_custom_css():
         color: var(--text)!important;
     }
 
+    /* --- Score Analysis Phase 5 --- */
+    .sa-missing-panel {
+        border: 2px solid var(--secondary);
+        border-radius: var(--radius-md);
+        padding: var(--sp-16);
+        background: rgba(44, 64, 167, 0.06);
+        color: var(--text);
+        margin-bottom: var(--sp-12);
+    }
+    .sa-missing-panel p,
+    .sa-missing-panel li {
+        color: var(--text)!important;
+    }
+    html[data-theme="dark"] .sa-missing-panel {
+        background: rgba(44, 64, 167, 0.22);
+        border-color: var(--secondary);
+    }
+    .sa-combo-card {
+        border: 2px solid var(--sa-combo-color);
+        border-radius: var(--radius-md);
+        padding: var(--sp-16);
+        text-align: center;
+        margin-bottom: var(--sp-8);
+        background: transparent;
+    }
+    .sa-combo-card-success { --sa-combo-color: var(--success); }
+    .sa-combo-card-warning { --sa-combo-color: var(--warning); }
+    .sa-combo-card-danger { --sa-combo-color: var(--danger); }
+    .sa-combo-card-code {
+        font-size: 1.4em;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .sa-combo-card-score {
+        font-size: 1.8em;
+        font-weight: 800;
+        color: var(--sa-combo-color);
+    }
+    .sa-combo-card-subjects {
+        font-size: 0.8em;
+        color: var(--text);
+        opacity: 0.72;
+    }
+    .sa-combo-card-alert {
+        color: var(--sa-combo-color);
+        font-size: 0.75em;
+        font-weight: 700;
+    }
+
     /* ============================================================
        PROFILE PAGE
        ============================================================ */

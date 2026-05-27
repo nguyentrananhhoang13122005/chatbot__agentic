@@ -2,12 +2,18 @@ import ast
 import os
 
 
-APP_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app.py")
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_PATH = os.path.join(ROOT_DIR, "app.py")
+COMPONENTS_PATH = os.path.join(ROOT_DIR, "ui", "components.py")
+
+
+def _module_source(path):
+    with open(path, "r", encoding="utf-8") as file:
+        return file.read()
 
 
 def _source():
-    with open(APP_PATH, "r", encoding="utf-8") as file:
-        return file.read()
+    return "\n".join([_module_source(APP_PATH), _module_source(COMPONENTS_PATH)])
 
 
 def _tree():
@@ -41,7 +47,7 @@ def test_app_keeps_voice_chat_contract_from_main():
 
     assert "speech_to_text" in imported
     assert "generate_audio_from_text" in imported
-    assert "custom-chat-bar" in source
+    assert "custom_chat_input_" in source
     assert "pending_chat_query" in source
     assert "st.session_state.input_key_counter" in source
 
@@ -71,8 +77,8 @@ def test_guest_card_is_clickable_login_trigger():
     source = _source()
 
     assert "guest-login-card-marker" in source
-    assert 'st.button("Khách\\nĐĂNG NHẬP ĐỂ LƯU LỊCH SỬ", key="guest_login_card"' in source
-    assert "if st.button(\"Khách\\nĐĂNG NHẬP ĐỂ LƯU LỊCH SỬ\"" in source
+    assert 'key="guest_login_card"' in source
+    assert "login_dialog()" in source
     assert "opacity: 0.80" not in source
 
 

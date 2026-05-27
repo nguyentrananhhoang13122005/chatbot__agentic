@@ -12,6 +12,8 @@ from utils.score_calculator import (
     format_combination_display,
     MIN_THRESHOLD,
 )
+from utils.admission_matcher import find_top_k_schools_exam
+from utils.method_normalizer import is_exam_method
 from llm_client import call_llm
 
 # ======================================================================
@@ -74,7 +76,7 @@ def _parse_to_hop_column(to_hop_str: str) -> set[str]:
     return valid
 
 
-def find_top_k_schools(
+def _find_top_k_schools_legacy(
     student_scores: dict,
     methods: list[str] | None = None,
     k: int = 5,
@@ -389,6 +391,29 @@ def find_top_k_schools(
         "total_found": len(df_result),
         "warnings": warnings,
     }
+
+
+def find_top_k_schools(
+    student_scores: dict,
+    methods: list[str] | None = None,
+    k: int = 5,
+    bonus: float = 0.0,
+    year_priority: list[int] | None = None,
+    top_n_combos: int = 5,
+) -> dict:
+    """
+    Route exam-only analysis through the deterministic SQLite pipeline.
+
+    Transcript and mixed-mode requests intentionally keep the existing legacy
+    behavior until the UI phase separates modes.
+    """
+    if methods and _is_exam_only(methods):
+        return find_top_k_schools_exam(student_scores, k, bonus, year_priority, top_n_combos)
+    return _find_top_k_schools_legacy(student_scores, methods, k, bonus, year_priority, top_n_combos)
+
+
+def _is_exam_only(methods: list[str]) -> bool:
+    return bool(methods) and all(is_exam_method(method) for method in methods)
 
 
 def build_analysis_prompt(result: dict) -> str:
