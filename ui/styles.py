@@ -1,6 +1,42 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 def load_custom_css():
+    # === ANTI-FLASH: Blocking script reads localStorage BEFORE any CSS paint ===
+    # This runs synchronously on the parent document, setting data-theme
+    # AND applying critical inline dark styles before the browser paints anything.
+    components.html("""
+    <script>
+    (function() {
+        try {
+            var doc = window.parent.document;
+            var html = doc.documentElement;
+            var saved = localStorage.getItem('unisearch-theme');
+            var isDark = (saved === 'dark') ||
+                (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (saved === 'dark' || saved === 'light') {
+                html.setAttribute('data-theme', saved);
+            } else if (isDark) {
+                html.setAttribute('data-theme', 'dark');
+            }
+            // If dark: apply critical inline styles IMMEDIATELY to prevent any white flash
+            if (isDark) {
+                html.style.backgroundColor = '#111113';
+                html.style.colorScheme = 'dark';
+                doc.body.style.backgroundColor = '#111113';
+                // Kill the Streamlit header white strip instantly
+                var hdr = doc.querySelector('header[data-testid="stHeader"]');
+                if (hdr) hdr.style.cssText = 'background:transparent!important;background-color:transparent!important;';
+                // Also force the app view container
+                var appContainer = doc.querySelector('[data-testid="stAppViewContainer"]') ||
+                                   doc.querySelector('.appview-container');
+                if (appContainer) appContainer.style.backgroundColor = '#111113';
+            }
+        } catch(e) {}
+    })();
+    </script>
+    """, height=0, scrolling=False)
+
     css = """
     :root {
         /* Colors from DESIGN.md */
@@ -38,18 +74,71 @@ def load_custom_css():
 
     /* === DARK MODE VARIABLE OVERRIDES === */
     html[data-theme="dark"] {
-        --surface: #1A1A2E;
-        --paper: #16162A;
-        --text: #F0F0F5;
-        --border: #3A3A5C;
-        --neutral: #1A1A2E;
-        
-        --riso-shadow: 4px 4px 0px rgba(242, 55, 161, 0.3);
-        --riso-shadow-hover: 6px 6px 0px var(--primary);
+        /* Neutral dark palette — desaturated, sophisticated */
+        --surface: #18181B;
+        --paper: #111113;
+        --text: #EDEDF0;
+        --border: #2E2E33;
+        --neutral: #18181B;
+
+        /* Elevated surface for cards/popovers */
+        --surface-raised: #222226;
+        /* Muted text for secondary info */
+        --text-secondary: #8B8B94;
+
+        /* Dark-mode shadows: subtle glows instead of hard offsets */
+        --riso-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);
+        --riso-shadow-hover: 0 4px 20px rgba(242, 55, 161, 0.18), 0 0 0 1px var(--primary);
+
+        /* Glow tokens for interactive elements */
+        --glow-primary: 0 0 20px rgba(242, 55, 161, 0.15);
+        --glow-secondary: 0 0 20px rgba(44, 64, 167, 0.15);
+
+        color-scheme: dark;
+    }
+
+    /* === SMOOTH THEME TRANSITION (only when user clicks toggle) === */
+    html.theme-transitioning,
+    html.theme-transitioning *,
+    html.theme-transitioning *::before,
+    html.theme-transitioning *::after {
+        transition: background-color 0.35s ease, color 0.35s ease,
+                    border-color 0.35s ease, box-shadow 0.35s ease,
+                    background 0.35s ease !important;
     }
 
     /* STREAMLIT NATIVE CONTROLS PRESERVED & CUSTOMIZED */
     .block-container { padding-top:4rem!important; padding-bottom:8rem!important; max-width:100vw!important; }
+
+    /* === HIDE STREAMLIT HEADER BAR (always transparent, no gap) === */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        backdrop-filter: none !important;
+    }
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+    [data-testid="stToolbar"] {
+        background: transparent !important;
+    }
+
+    /* === HIDE components.html() zero-height iframes (anti-flash scripts) === */
+    iframe[height="0"],
+    iframe[style*="height: 0"] {
+        display: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    /* Also hide the Streamlit element wrapper divs that contain zero-height iframes */
+    div[data-testid="stCustomComponentV1"]:has(iframe[height="0"]),
+    div.stCustomComponentV1:has(iframe[height="0"]) {
+        display: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
     /* Fix Material Icons Globally (prevents raw text like keyboard_double_arrow_right) */
     span.material-symbols-rounded, 
     span[data-testid="stIconMaterial"],
@@ -445,7 +534,7 @@ def load_custom_css():
         position: fixed !important;
         top: 14px !important;
         right: 80px !important;
-        z-index: 9998 !important;
+        z-index: 999999 !important; /* Must be higher than stHeader (999990) to be clickable */
         background: var(--surface) !important;
         border: 2px solid var(--border) !important;
         border-radius: var(--radius-md) !important;
@@ -1028,12 +1117,14 @@ def load_custom_css():
     }
 
     /* ============================================================
-       DARK MODE — Component Overrides
+       DARK MODE — Component Overrides (Modern Refined)
        ============================================================ */
 
     /* --- Global Background --- */
     html[data-theme="dark"] .stApp {
-        background: linear-gradient(-45deg, var(--paper), rgba(242, 55, 161, 0.06), #1E1E36, rgba(44, 64, 167, 0.06))!important;
+        background: linear-gradient(160deg, var(--paper) 0%, #141416 40%, #18181B 70%, #141416 100%)!important;
+        background-size: 100% 100%!important;
+        animation: none!important;
     }
     html[data-theme="dark"] .stApp,
     html[data-theme="dark"] .main,
@@ -1043,23 +1134,47 @@ def load_custom_css():
         color: var(--text)!important;
     }
 
+    /* --- Header / Toolbar / Decoration (eliminate white strip) --- */
+    html[data-theme="dark"] header[data-testid="stHeader"] {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    html[data-theme="dark"] [data-testid="stDecoration"] {
+        display: none !important;
+    }
+    html[data-theme="dark"] [data-testid="stToolbar"] {
+        background: transparent !important;
+    }
+    /* Force ALL top-level Streamlit wrappers dark */
+    html[data-theme="dark"] [data-testid="stAppViewContainer"],
+    html[data-theme="dark"] [data-testid="stAppViewBlockContainer"],
+    html[data-theme="dark"] .appview-container,
+    html[data-theme="dark"] .stAppViewContainer {
+        background-color: var(--paper) !important;
+    }
+
     /* --- Sidebar --- */
     html[data-theme="dark"] [data-testid="stSidebar"] {
-        background: #1E1E36!important;
-        border-right: 2px solid var(--border)!important;
+        background: var(--paper)!important;
+        border-right: 1px solid var(--border)!important;
     }
     html[data-theme="dark"] [data-testid="stSidebar"] > div * {
         color: var(--text);
     }
     html[data-theme="dark"] .sb-header {
-        background: #1E1E36;
-        border-bottom: 2px solid var(--border);
+        background: var(--paper);
+        border-bottom: 1px solid var(--border);
+    }
+    html[data-theme="dark"] .sb-name {
+        color: var(--text);
     }
     html[data-theme="dark"] .sb-tag {
-        color: var(--surface);
+        color: #FFFFFF;
+        background: var(--primary);
+        border-color: transparent;
     }
     html[data-theme="dark"] .sb-section {
-        color: var(--text);
+        color: var(--text-secondary, #8B8B94);
         border-bottom-color: var(--border);
     }
 
@@ -1067,17 +1182,17 @@ def load_custom_css():
     html[data-theme="dark"] .sb-user-card-container {
         border-top-color: var(--border);
     }
-
     html[data-theme="dark"] button.sb-user-card-btn {
-        background: var(--surface) !important;
+        background: var(--surface-raised, #222226) !important;
         border-color: var(--border) !important;
-        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.5) !important;
+        box-shadow: var(--riso-shadow) !important;
     }
     html[data-theme="dark"] button.sb-user-card-btn:hover {
-        box-shadow: 5px 5px 0px var(--primary) !important;
+        border-color: var(--primary) !important;
+        box-shadow: var(--riso-shadow-hover) !important;
     }
     html[data-theme="dark"] button.sb-user-card-btn::before {
-        border-color: var(--border);
+        border-color: transparent;
     }
     html[data-theme="dark"] button.sb-user-card-btn::after {
         color: var(--text) !important;
@@ -1085,34 +1200,38 @@ def load_custom_css():
 
     /* Popup menu dark mode */
     html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] {
-        background: var(--surface) !important;
-        border-color: var(--border) !important;
-        box-shadow: 4px 4px 0px rgba(44, 64, 167, 0.4) !important;
+        background: var(--surface-raised, #222226) !important;
+        border: 1px solid var(--border) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
     }
     html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button {
         color: var(--text) !important;
     }
     html[data-theme="dark"] .sb-user-popover div[data-testid="stPopoverBody"] div.stButton > button:hover {
-        background: rgba(242, 55, 161, 0.12) !important;
+        background: rgba(242, 55, 161, 0.1) !important;
         color: var(--primary) !important;
     }
 
     /* --- History Items --- */
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker):hover {
-        background: rgba(255,255,255,0.05);
+        background: rgba(255, 255, 255, 0.04);
     }
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) {
-        background: rgba(44, 64, 167, 0.15);
+        background: rgba(242, 55, 161, 0.08);
+        border-left-color: var(--primary);
     }
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) div[data-testid="column"]:first-child div.stButton > button {
         color: var(--text) !important;
     }
-    html[data-theme="dark"] .hist-time { color: #888; }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker.active) div[data-testid="column"]:first-child div.stButton > button p {
+        color: var(--primary) !important;
+    }
+    html[data-theme="dark"] .hist-time { color: var(--text-secondary, #8B8B94); }
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) .stPopover button::after {
-        color: #aaa !important;
+        color: var(--text-secondary, #8B8B94) !important;
     }
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) .stPopover button:hover {
-        background: rgba(255,255,255,0.08) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
     }
     html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.hist-row-marker) .stPopover button:hover::after {
         color: var(--primary) !important;
@@ -1120,126 +1239,312 @@ def load_custom_css():
 
     /* --- Popover Menu --- */
     html[data-theme="dark"] div[data-testid="stPopoverBody"] {
-        background: var(--surface) !important;
-        border-color: var(--border) !important;
+        background: var(--surface-raised, #222226) !important;
+        border: 1px solid var(--border) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
     }
     html[data-theme="dark"] div[data-testid="stPopoverBody"] div.stButton > button {
         color: var(--text) !important;
     }
     html[data-theme="dark"] div[data-testid="stPopoverBody"] div.stButton > button:hover {
-        background: rgba(255,255,255,0.08) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
     }
 
     /* --- Buttons --- */
     html[data-theme="dark"] div.stButton > button[kind="secondary"],
     html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-secondary"] {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         color: var(--text)!important;
-        border-color: var(--border)!important;
-        box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3)!important;
-    }
-    html[data-theme="dark"] div.stButton > button[kind="secondary"]:hover,
-    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-secondary"]:hover {
-        background: var(--secondary)!important;
-        color: #FFFFFF!important;
-        box-shadow: 4px 4px 0px var(--primary)!important;
-    }
-    html[data-theme="dark"] div.stButton > button[kind="primary"],
-    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-primary"] {
         border-color: var(--border)!important;
         box-shadow: var(--riso-shadow)!important;
     }
+    html[data-theme="dark"] div.stButton > button[kind="secondary"]:hover,
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-secondary"]:hover {
+        background: var(--surface-raised, #222226)!important;
+        color: var(--primary)!important;
+        border-color: var(--primary)!important;
+        box-shadow: var(--riso-shadow-hover)!important;
+    }
+    html[data-theme="dark"] div.stButton > button[kind="primary"],
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-primary"] {
+        border-color: rgba(242, 55, 161, 0.4)!important;
+        box-shadow: var(--glow-primary, 0 0 20px rgba(242, 55, 161, 0.15))!important;
+    }
+    html[data-theme="dark"] div.stButton > button[kind="primary"]:hover,
+    html[data-theme="dark"] div.stButton > button[data-testid="stBaseButton-primary"]:hover {
+        box-shadow: 0 0 30px rgba(242, 55, 161, 0.25)!important;
+    }
     html[data-theme="dark"] div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button,
     html[data-theme="dark"] .login-btn-container .stButton > button {
-        background: var(--surface) !important;
+        background: var(--surface-raised, #222226) !important;
         color: var(--text) !important;
         border-color: var(--border) !important;
-        box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3) !important;
+        box-shadow: var(--riso-shadow) !important;
     }
     html[data-theme="dark"] div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button:hover,
     html[data-theme="dark"] .login-btn-container .stButton > button:hover {
         background: var(--primary) !important;
         color: #FFFFFF !important;
-        box-shadow: 4px 4px 0px var(--secondary) !important;
+        border-color: var(--primary) !important;
+        box-shadow: var(--glow-primary) !important;
     }
+    /* --- Login Dialog (Dark Mode — comprehensive) --- */
+
+    /* Modal overlay: darken the backdrop */
+    html[data-theme="dark"] div[data-testid="stDialog"]::before,
+    html[data-theme="dark"] div[data-testid="stModal"] > div:first-child {
+        background-color: rgba(0, 0, 0, 0.7) !important;
+    }
+
+    /* Dialog content area */
     html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogContent"],
+    html[data-theme="dark"] div[data-testid="stDialog"] [role="dialog"],
+    html[data-theme="dark"] div[data-testid="stModal"] [data-testid="stDialogContent"],
+    html[data-theme="dark"] div[data-testid="stModal"] [role="dialog"] {
+        background: var(--surface, #18181B) !important;
+        background-color: var(--surface, #18181B) !important;
+        color: var(--text, #EDEDF0) !important;
+        border: 1px solid var(--border, #2E2E33) !important;
+        box-shadow: 0 16px 64px rgba(0, 0, 0, 0.7) !important;
+    }
+
+    /* ALL text inside dialog */
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stMarkdownContainer"],
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stMarkdownContainer"] p,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stMarkdownContainer"] strong,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stMarkdownContainer"] b,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stMarkdownContainer"] span,
+    html[data-theme="dark"] div[data-testid="stDialog"] h1,
+    html[data-theme="dark"] div[data-testid="stDialog"] h2,
+    html[data-theme="dark"] div[data-testid="stDialog"] h3,
+    html[data-theme="dark"] div[data-testid="stDialog"] label,
+    html[data-theme="dark"] div[data-testid="stDialog"] p {
+        color: var(--text, #EDEDF0) !important;
+    }
+
+    /* Dialog title */
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogContent"] > div:first-child {
+        color: var(--text, #EDEDF0) !important;
+    }
+
+    /* Divider inside dialog */
+    html[data-theme="dark"] div[data-testid="stDialog"] hr {
+        border-color: var(--border, #2E2E33) !important;
+        opacity: 0.6;
+    }
+
+    /* --- Tabs inside dialog --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab-list"] {
+        border-bottom-color: var(--border, #2E2E33) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab"] {
+        color: var(--text-secondary, #8B8B94) !important;
+        background: transparent !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--primary, #F237A1) !important;
+        background: transparent !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab-highlight"] {
+        background-color: var(--primary, #F237A1) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab-border"] {
+        background-color: var(--border, #2E2E33) !important;
+    }
+    /* Tab panel content */
+    html[data-theme="dark"] div[data-testid="stDialog"] .stTabs [data-baseweb="tab-panel"] {
+        color: var(--text, #EDEDF0) !important;
+    }
+
+    /* --- Text inputs inside dialog --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] label,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] label p {
+        color: var(--text, #EDEDF0) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] input {
+        background: var(--surface-raised, #222226) !important;
+        color: var(--text, #EDEDF0) !important;
+        border-color: var(--border, #2E2E33) !important;
+        caret-color: var(--primary, #F237A1) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] input::placeholder {
+        color: var(--text-secondary, #8B8B94) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] input:focus {
+        border-color: var(--primary, #F237A1) !important;
+        box-shadow: 0 0 0 1px var(--primary, #F237A1) !important;
+    }
+    /* Password toggle icon (eye icon) */
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] button,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] [data-testid="stTextInputRootElement"] button {
+        color: var(--text-secondary, #8B8B94) !important;
+        background: transparent !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] button svg {
+        fill: var(--text-secondary, #8B8B94) !important;
+        stroke: var(--text-secondary, #8B8B94) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stTextInput"] button:hover svg {
+        fill: var(--text, #EDEDF0) !important;
+        stroke: var(--text, #EDEDF0) !important;
+    }
+    /* Input wrapper div (BaseWeb) */
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-baseweb="input"],
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-baseweb="input"] > div {
+        background-color: var(--surface-raised, #222226) !important;
+        border-color: var(--border, #2E2E33) !important;
+    }
+
+    /* --- Link button (Google login) --- */
     html[data-theme="dark"] div[data-testid="stDialog"] .stLinkButton a {
-        background: var(--surface) !important;
-        color: var(--text) !important;
-        border-color: var(--border) !important;
+        background: var(--surface-raised, #222226) !important;
+        color: var(--text, #EDEDF0) !important;
+        border-color: var(--border, #2E2E33) !important;
+        box-shadow: var(--riso-shadow) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] .stLinkButton a:hover {
+        border-color: var(--primary) !important;
+        box-shadow: var(--riso-shadow-hover) !important;
+        color: var(--primary) !important;
+    }
+
+    /* --- Buttons inside dialog --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] div.stButton > button[data-testid="stBaseButton-primary"] {
+        box-shadow: var(--glow-primary) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] div.stButton > button[data-testid="stBaseButton-secondary"] {
+        background: var(--surface-raised, #222226) !important;
+        color: var(--text, #EDEDF0) !important;
+        border-color: var(--border, #2E2E33) !important;
+    }
+
+    /* --- Error/alert inside dialog --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] .stAlert {
+        background: var(--surface-raised, #222226) !important;
+        color: var(--text, #EDEDF0) !important;
+        border-color: var(--border, #2E2E33) !important;
+    }
+
+    /* --- Close button (X) --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] button[aria-label="Close"],
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogDismissButton"] {
+        color: var(--text-secondary, #8B8B94) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] button[aria-label="Close"]:hover,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogDismissButton"]:hover {
+        color: var(--text, #EDEDF0) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDialog"] button[aria-label="Close"] svg,
+    html[data-theme="dark"] div[data-testid="stDialog"] [data-testid="stDialogDismissButton"] svg {
+        fill: currentColor !important;
+        stroke: currentColor !important;
     }
 
     /* --- Hero --- */
     html[data-theme="dark"] .hero .desc {
-        background: var(--surface);
+        background: var(--surface-raised, #222226);
         border-color: var(--border);
         box-shadow: var(--riso-shadow);
         color: var(--text);
     }
+    html[data-theme="dark"] .hero .desc:hover {
+        box-shadow: var(--riso-shadow-hover);
+        border-color: rgba(242, 55, 161, 0.3);
+    }
     html[data-theme="dark"] .hero h1 { color: var(--text); }
-    html[data-theme="dark"] .hero .hl-pink { text-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
-    html[data-theme="dark"] .hero .hl-blue { text-shadow: 2px 2px 0px rgba(44, 64, 167, 0.3); }
+    html[data-theme="dark"] .hero .hl-pink {
+        color: var(--primary);
+        text-shadow: 0 0 30px rgba(242, 55, 161, 0.35);
+    }
+    html[data-theme="dark"] .hero .hl-blue {
+        color: #6B82F0;
+        text-shadow: 0 0 30px rgba(107, 130, 240, 0.3);
+    }
 
     /* --- Stats --- */
     html[data-theme="dark"] .stat {
-        background: var(--surface);
+        background: var(--surface-raised, #222226);
         border-color: var(--border);
-        box-shadow: 4px 4px 0px rgba(44, 64, 167, 0.4);
+        box-shadow: var(--riso-shadow);
     }
     html[data-theme="dark"] .stat:hover {
-        box-shadow: 8px 12px 0px var(--primary);
+        border-color: var(--primary);
+        box-shadow: var(--riso-shadow-hover);
     }
-    html[data-theme="dark"] .stat-n { color: var(--text); text-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
-    html[data-theme="dark"] .stat-l { color: var(--text); }
+    html[data-theme="dark"] .stat-n {
+        color: var(--text);
+        text-shadow: 0 0 24px rgba(242, 55, 161, 0.25);
+    }
+    html[data-theme="dark"] .stat-l { color: var(--text-secondary, #8B8B94); }
 
     /* --- Cards --- */
     html[data-theme="dark"] .r-card {
-        background: var(--surface);
+        background: var(--surface-raised, #222226);
         border-color: var(--border);
         box-shadow: var(--riso-shadow);
     }
     html[data-theme="dark"] .r-card:hover {
-        box-shadow: 8px 8px 0px var(--primary);
+        border-color: var(--primary);
+        box-shadow: var(--riso-shadow-hover);
+    }
+    html[data-theme="dark"] .r-card:hover .r-card-icon {
+        box-shadow: var(--glow-primary, 0 0 20px rgba(242, 55, 161, 0.15));
     }
     html[data-theme="dark"] .r-card-title { color: var(--text); }
-    html[data-theme="dark"] .r-card-desc { color: var(--text); }
-    html[data-theme="dark"] .r-card-num { background: var(--border); color: var(--text); }
-    html[data-theme="dark"] .r-card-icon { border-color: var(--border); box-shadow: 2px 2px 0px rgba(242, 55, 161, 0.3); }
-    html[data-theme="dark"] .r-card.accent .r-card-num { background: var(--surface); color: var(--primary); }
+    html[data-theme="dark"] .r-card-desc { color: var(--text-secondary, #8B8B94); }
+    html[data-theme="dark"] .r-card-num {
+        background: var(--border);
+        color: var(--text-secondary, #8B8B94);
+    }
+    html[data-theme="dark"] .r-card-icon {
+        border-color: transparent;
+        box-shadow: none;
+    }
+    html[data-theme="dark"] .r-card.accent {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+    html[data-theme="dark"] .r-card.accent .r-card-num {
+        background: rgba(0, 0, 0, 0.2);
+        color: rgba(255, 255, 255, 0.9);
+    }
 
     /* --- Chat --- */
     html[data-theme="dark"] .chat-hdr {
-        border-color: var(--border);
-        box-shadow: 4px 4px 0px rgba(242, 55, 161, 0.4);
+        border-color: transparent;
+        box-shadow: var(--glow-secondary, 0 0 20px rgba(44, 64, 167, 0.15));
     }
     html[data-theme="dark"] [data-testid="stChatMessage"] {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         border-color: var(--border)!important;
-        box-shadow: 3px 3px 0px rgba(242, 55, 161, 0.2)!important;
+        box-shadow: var(--riso-shadow)!important;
     }
     html[data-theme="dark"] [data-testid="stChatMessage"]:hover {
-        box-shadow: 5px 5px 0px rgba(44, 64, 167, 0.4)!important;
+        border-color: rgba(242, 55, 161, 0.25)!important;
+        box-shadow: var(--riso-shadow-hover)!important;
     }
     html[data-theme="dark"] [data-testid="stChatMessage"]:nth-child(even) {
-        background: var(--paper)!important;
-        box-shadow: 3px 3px 0px rgba(44, 64, 167, 0.3)!important;
+        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        box-shadow: var(--riso-shadow)!important;
     }
     html[data-theme="dark"] [data-testid="stChatInput"] textarea {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         border-color: var(--border)!important;
         color: var(--text)!important;
     }
     html[data-theme="dark"] [data-testid="stChatInput"] textarea::placeholder {
-        color: #888!important;
+        color: var(--text-secondary, #8B8B94)!important;
         opacity: 1!important;
     }
     html[data-theme="dark"] [data-testid="stChatInput"] textarea:focus {
         border-color: var(--primary)!important;
-        box-shadow: 4px 4px 0px rgba(242, 55, 161, 0.3)!important;
+        box-shadow: 0 0 0 1px var(--primary), var(--glow-primary)!important;
     }
     html[data-theme="dark"] [data-testid="stChatInput"],
     html[data-theme="dark"] [data-testid="stChatInput"] * {
-        background-color: var(--surface)!important;
+        background-color: var(--surface-raised, #222226)!important;
         border-color: var(--border)!important;
     }
     html[data-theme="dark"] [data-testid="stChatInput"] button {
@@ -1252,8 +1557,9 @@ def load_custom_css():
 
     /* --- File Uploader --- */
     html[data-theme="dark"] [data-testid="stFileUploader"] section {
-        border-color: var(--secondary)!important;
-        background: var(--surface)!important;
+        border-color: var(--border)!important;
+        border-style: dashed!important;
+        background: var(--surface-raised, #222226)!important;
     }
     html[data-theme="dark"] [data-testid="stFileUploader"] section * {
         color: var(--text)!important;
@@ -1264,11 +1570,12 @@ def load_custom_css():
         color: var(--text)!important;
     }
     html[data-theme="dark"] [data-testid="stFileUploader"] section button:hover {
-        background: var(--secondary)!important;
+        background: var(--primary)!important;
+        border-color: var(--primary)!important;
         color: #FFFFFF!important;
     }
     html[data-theme="dark"] [data-testid="stFileUploader"] label { color: var(--text)!important; }
-    html[data-theme="dark"] [data-testid="stFileUploader"] small { color: var(--text)!important; }
+    html[data-theme="dark"] [data-testid="stFileUploader"] small { color: var(--text-secondary, #8B8B94)!important; }
     html[data-theme="dark"] [data-testid="stFileUploader"] span { color: var(--text)!important; }
 
     /* --- AI Thinking --- */
@@ -1277,25 +1584,30 @@ def load_custom_css():
     /* --- Markdown & Text --- */
     html[data-theme="dark"] [data-testid="stMarkdownContainer"] p { color: var(--text); }
     html[data-theme="dark"] hr { border-color: var(--border)!important; }
-    html[data-theme="dark"] [data-testid="stCaptionContainer"] { color: #999!important; }
+    html[data-theme="dark"] [data-testid="stCaptionContainer"] { color: var(--text-secondary, #8B8B94)!important; }
 
     /* --- Streamlit Native Widgets Override --- */
     html[data-theme="dark"] [data-testid="stTextInput"] input,
     html[data-theme="dark"] [data-testid="stSelectbox"] > div,
     html[data-theme="dark"] [data-testid="stMultiSelect"] > div {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         color: var(--text)!important;
         border-color: var(--border)!important;
     }
+    html[data-theme="dark"] [data-testid="stTextInput"] input:focus {
+        border-color: var(--primary)!important;
+        box-shadow: 0 0 0 1px var(--primary)!important;
+    }
     html[data-theme="dark"] .stAlert {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         border-color: var(--border)!important;
         color: var(--text)!important;
     }
     html[data-theme="dark"] [data-testid="stToast"] {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         color: var(--text)!important;
-        border-color: var(--border)!important;
+        border: 1px solid var(--border)!important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5)!important;
     }
 
     /* --- Sidebar Toggle Icons in Dark Mode --- */
@@ -1347,16 +1659,79 @@ def load_custom_css():
     }
 
     /* --- Scrollbar Dark Mode --- */
-    html[data-theme="dark"] ::-webkit-scrollbar { width: 8px; }
-    html[data-theme="dark"] ::-webkit-scrollbar-track { background: var(--paper); }
-    html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    html[data-theme="dark"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+    html[data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
+    html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary, #8B8B94); }
 
     /* --- Dataframe Dark Mode --- */
     html[data-theme="dark"] [data-testid="stDataFrame"],
     html[data-theme="dark"] [data-testid="stTable"] {
-        background: var(--surface)!important;
+        background: var(--surface-raised, #222226)!important;
         color: var(--text)!important;
+    }
+
+    /* --- Guest Login Card (Dark Mode) --- */
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button {
+        background: var(--surface-raised, #222226) !important;
+        border-color: var(--border) !important;
+        box-shadow: var(--riso-shadow) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button:hover {
+        border-color: var(--primary) !important;
+        box-shadow: var(--riso-shadow-hover) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button::before {
+        border-color: transparent;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button p {
+        color: var(--text-secondary, #8B8B94) !important;
+    }
+    html[data-theme="dark"] [data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div:has(.guest-login-card-marker) + div div.stButton > button p::first-line {
+        color: var(--text) !important;
+    }
+
+    /* --- Custom Chat Bar (Dark Mode) --- */
+    html[data-theme="dark"] .custom-chat-bar {
+        background: var(--paper) !important;
+        border-top: 1px solid var(--border) !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3) !important;
+    }
+    html[data-theme="dark"] .custom-chat-bar .stTextInput > div > div {
+        border-color: var(--border) !important;
+    }
+    html[data-theme="dark"] .custom-chat-bar .stTextInput > div > div:focus-within {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 1px var(--primary), var(--glow-primary) !important;
+    }
+    html[data-theme="dark"] .custom-chat-bar .stTextInput input {
+        background: var(--surface-raised, #222226) !important;
+        color: var(--text) !important;
+    }
+    html[data-theme="dark"] .custom-chat-bar .stButton button {
+        border-color: transparent !important;
+        box-shadow: var(--glow-primary) !important;
+    }
+
+    /* --- Bottom Bar (Dark Mode) --- */
+    html[data-theme="dark"] section[data-testid="stBottom"] {
+        background: var(--paper) !important;
+        border-top: 1px solid var(--border) !important;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* --- Skeleton Loading (Dark Mode) --- */
+    html[data-theme="dark"] .skeleton-container {
+        background: var(--surface-raised, #222226);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+    }
+    html[data-theme="dark"] .skeleton-avatar {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: var(--border);
+    }
+    html[data-theme="dark"] .skeleton-line {
+        background: rgba(255, 255, 255, 0.06);
     }
 
     /* --- Score Analysis Phase 5 --- */
@@ -1373,8 +1748,8 @@ def load_custom_css():
         color: var(--text)!important;
     }
     html[data-theme="dark"] .sa-missing-panel {
-        background: rgba(44, 64, 167, 0.22);
-        border-color: var(--secondary);
+        background: rgba(44, 64, 167, 0.12);
+        border-color: rgba(44, 64, 167, 0.3);
     }
     .sa-combo-card {
         border: 2px solid var(--sa-combo-color);
@@ -1406,6 +1781,55 @@ def load_custom_css():
         color: var(--sa-combo-color);
         font-size: 0.75em;
         font-weight: 700;
+    }
+
+    /* --- Profile Page (Dark Mode) --- */
+    html[data-theme="dark"] .profile-header {
+        background: var(--surface-raised, #222226);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+    }
+    html[data-theme="dark"] .profile-header:hover {
+        border-color: var(--primary);
+        box-shadow: var(--riso-shadow-hover);
+    }
+    html[data-theme="dark"] .profile-avatar {
+        border-color: transparent;
+        box-shadow: var(--glow-primary);
+    }
+    html[data-theme="dark"] .profile-email {
+        color: var(--text-secondary, #8B8B94);
+    }
+    html[data-theme="dark"] .profile-meta {
+        color: var(--text-secondary, #8B8B94);
+    }
+    html[data-theme="dark"] .profile-section-count {
+        background: var(--primary);
+        border-color: transparent;
+    }
+    html[data-theme="dark"] .profile-login-prompt {
+        background: var(--surface-raised, #222226);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+    }
+    html[data-theme="dark"] .uni-history-card {
+        background: var(--surface-raised, #222226);
+        border-color: var(--border);
+        box-shadow: var(--riso-shadow);
+    }
+    html[data-theme="dark"] .uni-history-card:hover {
+        border-color: var(--primary);
+        box-shadow: var(--riso-shadow-hover);
+    }
+    html[data-theme="dark"] .uni-history-query {
+        color: var(--text-secondary, #8B8B94);
+    }
+    html[data-theme="dark"] .uni-history-time {
+        color: var(--text-secondary, #8B8B94);
+    }
+    html[data-theme="dark"] .uni-empty-state {
+        background: var(--surface-raised, #222226);
+        border-color: var(--border);
     }
 
     /* ============================================================
@@ -1605,6 +2029,287 @@ def load_custom_css():
         font-weight: 700;
         color: var(--text);
         opacity: 0.8;
+    }
+
+    /* ============================================================
+       MOBILE RESPONSIVE
+       ============================================================ */
+
+    /* --- Tablet & small laptop (max-width: 768px) --- */
+    @media (max-width: 768px) {
+        /* Global */
+        .block-container {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+            padding-top: 3rem !important;
+        }
+
+        /* Sidebar */
+        [data-testid="stSidebar"][aria-expanded="true"] {
+            min-width: 85vw !important;
+            width: 85vw !important;
+            max-width: 320px !important;
+        }
+
+        /* Hero */
+        .hero {
+            padding: var(--sp-24) var(--sp-16) !important;
+        }
+        .hero h1 {
+            font-size: 32px !important;
+            letter-spacing: -0.5px !important;
+        }
+        .hero .desc {
+            font-size: 15px !important;
+            padding: var(--sp-12) !important;
+        }
+        .badge {
+            font-size: 12px !important;
+            padding: var(--sp-4) var(--sp-12) !important;
+            margin-bottom: var(--sp-24) !important;
+        }
+
+        /* Stats */
+        .stats {
+            flex-direction: column !important;
+            gap: var(--sp-16) !important;
+            margin: var(--sp-24) auto !important;
+            max-width: 100% !important;
+        }
+        .stat {
+            padding: var(--sp-16) var(--sp-12) !important;
+        }
+        .stat-n {
+            font-size: 32px !important;
+        }
+
+        /* Cards */
+        .cards-row {
+            flex-direction: column !important;
+            gap: var(--sp-16) !important;
+            margin-top: var(--sp-24) !important;
+            padding-bottom: var(--sp-24) !important;
+        }
+        .r-card {
+            padding: var(--sp-16) !important;
+        }
+        .r-card-title {
+            font-size: 17px !important;
+        }
+        .r-card-desc {
+            font-size: 14px !important;
+        }
+
+        /* Chat */
+        .chat-hdr {
+            font-size: 18px !important;
+            padding: var(--sp-12) !important;
+            margin-bottom: var(--sp-16) !important;
+        }
+        [data-testid="stChatMessage"] {
+            padding: var(--sp-12) !important;
+            margin-bottom: var(--sp-12) !important;
+        }
+        [data-testid="stChatInput"] textarea {
+            font-size: 16px !important; /* 16px prevents iOS auto-zoom on focus */
+        }
+        section[data-testid="stBottom"] {
+            padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+        }
+
+        /* Login button */
+        div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button,
+        .login-btn-container .stButton > button {
+            right: 16px !important;
+            top: 10px !important;
+            font-size: 12px !important;
+            padding: 6px 14px !important;
+        }
+
+        /* Custom chat bar */
+        .custom-chat-bar {
+            padding: 8px 12px !important;
+        }
+
+        /* Profile page */
+        .profile-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: var(--sp-16) !important;
+            padding: var(--sp-16) !important;
+        }
+        .profile-avatar {
+            width: 56px !important;
+            height: 56px !important;
+            min-width: 56px !important;
+            font-size: 24px !important;
+        }
+        .profile-name {
+            font-size: 20px !important;
+        }
+        .profile-login-prompt {
+            margin: 32px 16px !important;
+            padding: var(--sp-24) !important;
+        }
+
+        /* University history cards */
+        .uni-history-card {
+            padding: var(--sp-12) !important;
+        }
+        .uni-history-name {
+            font-size: 15px !important;
+        }
+
+        /* Score analysis */
+        .sa-combo-card-score {
+            font-size: 1.4em !important;
+        }
+        .sa-combo-card-code {
+            font-size: 1.2em !important;
+        }
+    }
+
+    /* --- Small mobile (max-width: 480px) --- */
+    @media (max-width: 480px) {
+        .block-container {
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+            padding-top: 2.5rem !important;
+        }
+
+        /* Hero */
+        .hero {
+            padding: var(--sp-16) var(--sp-8) !important;
+        }
+        .hero h1 {
+            font-size: 26px !important;
+        }
+        .hero .desc {
+            font-size: 14px !important;
+            padding: var(--sp-8) !important;
+            line-height: 1.4 !important;
+        }
+        .badge {
+            font-size: 11px !important;
+            padding: 3px 8px !important;
+        }
+
+        /* Stats */
+        .stat-n {
+            font-size: 28px !important;
+        }
+        .stat-l {
+            font-size: 12px !important;
+        }
+
+        /* Cards */
+        .r-card {
+            padding: var(--sp-12) !important;
+        }
+        .r-card-icon {
+            width: 44px !important;
+            height: 44px !important;
+            font-size: 22px !important;
+        }
+        .r-card-title {
+            font-size: 16px !important;
+        }
+        .r-card-desc {
+            font-size: 13px !important;
+        }
+        .r-card-num {
+            font-size: 18px !important;
+        }
+
+        /* Chat */
+        .chat-hdr {
+            font-size: 16px !important;
+            gap: var(--sp-8) !important;
+        }
+        [data-testid="stChatMessage"] {
+            padding: var(--sp-8) !important;
+            box-shadow: 2px 2px 0px var(--text) !important;
+        }
+
+        /* Sidebar header */
+        .sb-header {
+            padding: var(--sp-8) var(--sp-12) var(--sp-8) !important;
+        }
+        .sb-logo {
+            font-size: 28px !important;
+        }
+        .sb-name {
+            font-size: 20px !important;
+        }
+
+        /* Profile */
+        .profile-header {
+            box-shadow: 3px 3px 0px var(--secondary) !important;
+        }
+        .profile-name {
+            font-size: 18px !important;
+        }
+        .profile-email {
+            font-size: 12px !important;
+        }
+        .profile-section-title {
+            font-size: 14px !important;
+        }
+
+        /* Login button  */
+        div[data-testid="stVerticalBlock"] > div:has(.login-btn-container) + div div.stButton > button,
+        .login-btn-container .stButton > button {
+            right: 10px !important;
+            top: 8px !important;
+            font-size: 11px !important;
+            padding: 5px 10px !important;
+            box-shadow: 1px 1px 0px var(--border) !important;
+        }
+
+        /* Skeleton loading */
+        .skeleton-container {
+            padding: var(--sp-12) !important;
+        }
+
+        /* Score analysis combo cards */
+        .sa-combo-card {
+            padding: var(--sp-12) !important;
+        }
+        .sa-combo-card-score {
+            font-size: 1.2em !important;
+        }
+    }
+
+    /* --- Safe-area for notched devices (iOS) --- */
+    @supports (padding: max(0px)) {
+        section[data-testid="stBottom"] {
+            padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+            padding-left: max(16px, env(safe-area-inset-left)) !important;
+            padding-right: max(16px, env(safe-area-inset-right)) !important;
+        }
+        .custom-chat-bar {
+            padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+        }
+    }
+
+    /* --- Touch-friendly targets --- */
+    @media (hover: none) and (pointer: coarse) {
+        /* Larger touch targets on mobile */
+        div.stButton > button {
+            min-height: 44px !important;
+        }
+        [data-testid="stChatInput"] textarea {
+            min-height: 44px !important;
+        }
+        /* Disable hover-based transforms on touch (prevents sticky hover) */
+        .r-card:hover,
+        .stat:hover,
+        .hero .desc:hover {
+            transform: none !important;
+        }
+        [data-testid="stChatMessage"]:hover {
+            transform: none !important;
+        }
     }
     """
     # Embed Google Fonts via @import inside <style> (works reliably in body, unlike <link>)

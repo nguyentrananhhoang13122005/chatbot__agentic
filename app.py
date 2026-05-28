@@ -88,16 +88,38 @@ components.html(f"""
 <script>
     (function() {{
         var theme = '{_current_theme}';
-        function applyTheme() {{
-            try {{
-                var doc = window.parent.document;
-                doc.documentElement.setAttribute('data-theme', theme);
-                localStorage.setItem('unisearch-theme', theme);
-            }} catch(e) {{}}
-        }}
-        applyTheme();
-        setTimeout(applyTheme, 100);
-        setTimeout(applyTheme, 500);
+        try {{
+            var doc = window.parent.document;
+            var html = doc.documentElement;
+            var prev = html.getAttribute('data-theme') || 'light';
+            // If theme changed (user toggled), add transition class for smooth animation
+            if (prev !== theme) {{
+                html.classList.add('theme-transitioning');
+                setTimeout(function() {{
+                    html.classList.remove('theme-transitioning');
+                }}, 400);
+            }}
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('unisearch-theme', theme);
+            // Force inline styles for dark mode to kill any white areas
+            if (theme === 'dark') {{
+                html.style.backgroundColor = '#111113';
+                doc.body.style.backgroundColor = '#111113';
+                var hdr = doc.querySelector('header[data-testid="stHeader"]');
+                if (hdr) hdr.style.cssText = 'background:transparent!important;background-color:transparent!important;';
+                var ac = doc.querySelector('[data-testid="stAppViewContainer"]') || doc.querySelector('.appview-container');
+                if (ac) ac.style.backgroundColor = '#111113';
+            }} else {{
+                // Clean up inline styles when switching to light
+                html.style.backgroundColor = '';
+                html.style.colorScheme = '';
+                doc.body.style.backgroundColor = '';
+                var hdr = doc.querySelector('header[data-testid="stHeader"]');
+                if (hdr) hdr.style.cssText = '';
+                var ac = doc.querySelector('[data-testid="stAppViewContainer"]') || doc.querySelector('.appview-container');
+                if (ac) ac.style.backgroundColor = '';
+            }}
+        }} catch(e) {{}}
     }})();
 </script>
 """, height=0, scrolling=False)

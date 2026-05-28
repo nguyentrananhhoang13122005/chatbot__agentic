@@ -88,7 +88,25 @@ def render_sidebar():
         toggle_icon = "🌙" if current_theme == "light" else "☀️"
         toggle_label = "Chế độ tối" if current_theme == "light" else "Chế độ sáng"
         if st.button(f"{toggle_icon} {toggle_label}", key="theme_toggle", use_container_width=True, type="secondary"):
-            st.session_state.theme = "dark" if current_theme == "light" else "light"
+            new_theme = "dark" if current_theme == "light" else "light"
+            st.session_state.theme = new_theme
+            # Pre-set localStorage & transition class BEFORE rerun to prevent flash
+            components.html(f"""
+            <script>
+            (function() {{
+                try {{
+                    var doc = window.parent.document;
+                    var html = doc.documentElement;
+                    html.classList.add('theme-transitioning');
+                    html.setAttribute('data-theme', '{new_theme}');
+                    localStorage.setItem('unisearch-theme', '{new_theme}');
+                    setTimeout(function() {{
+                        html.classList.remove('theme-transitioning');
+                    }}, 400);
+                }} catch(e) {{}}
+            }})();
+            </script>
+            """, height=0, scrolling=False)
             st.rerun()
 
         if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
