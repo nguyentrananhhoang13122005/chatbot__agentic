@@ -56,14 +56,22 @@ Playful two-color risograph-inspired system with paper-like warmth, vivid pink a
 
 ## Dark Mode Colors
 
-- **Surface (#1A1A2E):** Deep blue-black background for dark mode.
-- **Paper (#16162A):** Darker variant for gradient backgrounds.
-- **Text (#F0F0F5):** Light text for readability on dark surfaces.
-- **Border (#3A3A5C):** Muted purple-gray border for dark mode.
-- **Neutral (#1A1A2E):** Matches dark surface.
+- **Surface (#18181B):** Neutral dark surface — desaturated, sophisticated.
+- **Paper (#111113):** Deeper variant for backgrounds and sidebar.
+- **Surface-Raised (#222226):** Elevated surface for cards, popovers, inputs.
+- **Text (#EDEDF0):** Clean light text for readability on dark surfaces.
+- **Text-Secondary (#8B8B94):** Muted gray for secondary info, labels, timestamps.
+- **Border (#2E2E33):** Subtle neutral border — refined, not heavy.
+- **Neutral (#18181B):** Matches dark surface.
 - **Primary (#F237A1):** Unchanged — vivid pink stays vibrant on dark.
 - **Secondary (#2C40A7):** Unchanged — bold blue stays vibrant on dark.
-- **Sidebar (#1E1E36):** Slightly lighter than surface for visual hierarchy.
+- **hl-blue (#6B82F0):** Brightened blue for hero text on dark backgrounds.
+
+### Shadow System (Dark Mode)
+- **riso-shadow:** Ambient glow `0 2px 8px rgba(0,0,0,0.4)` + hairline border
+- **riso-shadow-hover:** Pink glow `0 4px 20px rgba(242,55,161,0.18)` + pink border
+- **glow-primary:** `0 0 20px rgba(242,55,161,0.15)` — for primary buttons & focus
+- **glow-secondary:** `0 0 20px rgba(44,64,167,0.15)` — for headers & accents
 
 ### Toggle Behavior
 - Default: Light mode (Riso paper-like warmth)
