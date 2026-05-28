@@ -40,6 +40,8 @@ def find_top_k_schools_exam(
     bonus: float,
     year_priority: list[int] | None,
     top_n_combos: int,
+    province: str | None = None,
+    major: str | None = None,
 ) -> dict:
     """Run the deterministic exam-mode matching pipeline."""
     scores = normalize_scores(_extract_score_mapping(student_scores))
@@ -71,6 +73,31 @@ def find_top_k_schools_exam(
             "strength": strength,
             "matched_schools": pd.DataFrame(),
             "warnings": warnings + ["⚠️ Không tìm thấy dữ liệu điểm thi THPT phù hợp."],
+        }
+        
+    # --- Lọc theo Ngành (Major) ---
+    if major:
+        rows = [r for r in rows if major.lower() in r.ten_nganh.lower()]
+        
+    # --- Lọc theo Tỉnh/Thành phố ---
+    if province:
+        try:
+            import json
+            json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "university_provinces.json")
+            with open(json_path, 'r', encoding='utf-8') as f:
+                prov_map = json.load(f)
+            # Map province, fallback to "Khác"
+            rows = [r for r in rows if prov_map.get(r.truong, "Khác") == province]
+        except Exception as e:
+            warnings.append(f"⚠️ Không thể tải dữ liệu Tỉnh/Thành phố: {e}")
+
+    if not rows:
+        return {
+            "scores": scores,
+            "top_combinations": top_combos,
+            "strength": strength,
+            "matched_schools": pd.DataFrame(),
+            "warnings": warnings + ["⚠️ Không tìm thấy trường/ngành nào phù hợp với bộ lọc Tỉnh thành & Ngành học."],
         }
 
     missing_inputs: list[str] = []
