@@ -794,56 +794,125 @@ def render_score_analysis_page():
         not_taken_subjects = set()
         invalid_score_inputs = []
 
-        col_left, col_right = st.columns(2)
-        for i, subj in enumerate(MAIN_SUBJECTS):
-            target_col = col_left if i < 5 else col_right
-            with target_col:
-                score, not_taken, valid = _render_subject_score_input(subj, existing, existing_not_taken)
-                if not valid:
-                    invalid_score_inputs.append(subj)
-                elif not_taken:
-                    not_taken_subjects.add(subj)
-                elif score is not None:
-                    input_scores[subj] = score
+        input_mode = st.radio(
+            "Chọn phương thức nhập điểm:",
+            ["Nhập điểm thi / Trung bình môn", "Nhập chi tiết Học bạ (6 học kỳ)"],
+            horizontal=True,
+            key="sa_input_mode_radio"
+        )
 
-        # --- Ngoại ngữ phụ (tùy chọn) ---
-        from utils.score_calculator import EXTRA_LANGUAGES
-        with st.expander(
-            "🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*",
-            expanded=missing_targets["language"],
-        ):
-            st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
-            lang_col1, lang_col2 = st.columns(2)
-            for j, lang in enumerate(EXTRA_LANGUAGES):
-                target_lang_col = lang_col1 if j < 3 else lang_col2
-                with target_lang_col:
-                    score, not_taken, valid = _render_subject_score_input(lang, existing, existing_not_taken)
+        if input_mode == "Nhập điểm thi / Trung bình môn":
+            st.markdown("**Nhập điểm thủ công** *(thang 10)*")
+            col_left, col_right = st.columns(2)
+            for i, subj in enumerate(MAIN_SUBJECTS):
+                target_col = col_left if i < 5 else col_right
+                with target_col:
+                    score, not_taken, valid = _render_subject_score_input(subj, existing, existing_not_taken)
                     if not valid:
-                        invalid_score_inputs.append(lang)
+                        invalid_score_inputs.append(subj)
                     elif not_taken:
-                        not_taken_subjects.add(lang)
+                        not_taken_subjects.add(subj)
                     elif score is not None:
-                        input_scores[lang] = score
+                        input_scores[subj] = score
 
-        # --- Năng khiếu (tùy chọn) ---
-        from utils.score_calculator import EXTRA_APTITUDE
-        with st.expander(
-            "🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*",
-            expanded=missing_targets["aptitude"],
-        ):
-            st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
-            apt_col1, apt_col2 = st.columns(2)
-            aptitude_inputs = list(EXTRA_APTITUDE) + _EXTRA_APTITUDE_DETAIL_INPUTS
-            for j, apt in enumerate(aptitude_inputs):
-                target_apt_col = apt_col1 if j % 2 == 0 else apt_col2
-                with target_apt_col:
-                    score, not_taken, valid = _render_subject_score_input(apt, existing, existing_not_taken)
-                    if not valid:
-                        invalid_score_inputs.append(apt)
-                    elif not_taken:
-                        not_taken_subjects.add(apt)
-                    elif score is not None:
-                        input_scores[apt] = score
+            # --- Ngoại ngữ phụ (tùy chọn) ---
+            from utils.score_calculator import EXTRA_LANGUAGES
+            with st.expander(
+                "🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*",
+                expanded=missing_targets["language"],
+            ):
+                st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
+                lang_col1, lang_col2 = st.columns(2)
+                for j, lang in enumerate(EXTRA_LANGUAGES):
+                    target_lang_col = lang_col1 if j < 3 else lang_col2
+                    with target_lang_col:
+                        score, not_taken, valid = _render_subject_score_input(lang, existing, existing_not_taken)
+                        if not valid:
+                            invalid_score_inputs.append(lang)
+                        elif not_taken:
+                            not_taken_subjects.add(lang)
+                        elif score is not None:
+                            input_scores[lang] = score
+
+            # --- Năng khiếu (tùy chọn) ---
+            from utils.score_calculator import EXTRA_APTITUDE
+            with st.expander(
+                "🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*",
+                expanded=missing_targets["aptitude"],
+            ):
+                st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
+                apt_col1, apt_col2 = st.columns(2)
+                aptitude_inputs = list(EXTRA_APTITUDE) + _EXTRA_APTITUDE_DETAIL_INPUTS
+                for j, apt in enumerate(aptitude_inputs):
+                    target_apt_col = apt_col1 if j % 2 == 0 else apt_col2
+                    with target_apt_col:
+                        score, not_taken, valid = _render_subject_score_input(apt, existing, existing_not_taken)
+                        if not valid:
+                            invalid_score_inputs.append(apt)
+                        elif not_taken:
+                            not_taken_subjects.add(apt)
+                        elif score is not None:
+                            input_scores[apt] = score
+        else:
+            import pandas as pd
+            import numpy as np
+
+            st.markdown("**Nhập điểm Học bạ chi tiết** *(từ 0 đến 10)*")
+            if "sa_transcript_df" not in st.session_state:
+                cols = ["HK1 Lớp 10", "HK2 Lớp 10", "HK1 Lớp 11", "HK2 Lớp 11", "HK1 Lớp 12", "HK2 Lớp 12"]
+                subjects_to_show = MAIN_SUBJECTS + ["Tin học", "Công nghệ"]
+                st.session_state.sa_transcript_df = pd.DataFrame(0.0, index=subjects_to_show, columns=cols)
+            
+            formula = st.selectbox(
+                "Cách tính điểm trung bình xét tuyển:",
+                [
+                    "Trung bình 5 học kỳ (Bỏ HK2 Lớp 12)", 
+                    "Trung bình 6 học kỳ (Cả 3 năm)",
+                    "Trung bình cả năm Lớp 12 (HK1 & HK2 L12)"
+                ],
+                key="sa_transcript_formula"
+            )
+
+            edited_df = st.data_editor(
+                st.session_state.sa_transcript_df,
+                use_container_width=True,
+                num_rows="fixed",
+                hide_index=False,
+                column_config={
+                    col: st.column_config.NumberColumn(
+                        col, min_value=0.0, max_value=10.0, step=0.1, format="%.1f"
+                    ) for col in st.session_state.sa_transcript_df.columns
+                }
+            )
+            st.session_state.sa_transcript_df = edited_df
+            
+            st.markdown("---")
+            st.markdown("**Kết quả tính Điểm Trung Bình:**")
+            
+            if formula == "Trung bình 5 học kỳ (Bỏ HK2 Lớp 12)":
+                cols_to_calc = ["HK1 Lớp 10", "HK2 Lớp 10", "HK1 Lớp 11", "HK2 Lớp 11", "HK1 Lớp 12"]
+            elif formula == "Trung bình 6 học kỳ (Cả 3 năm)":
+                cols_to_calc = ["HK1 Lớp 10", "HK2 Lớp 10", "HK1 Lớp 11", "HK2 Lớp 11", "HK1 Lớp 12", "HK2 Lớp 12"]
+            else:
+                cols_to_calc = ["HK1 Lớp 12", "HK2 Lớp 12"]
+
+            df_calc = edited_df[cols_to_calc].replace(0.0, np.nan)
+            avg_series = df_calc.mean(axis=1).round(2)
+            calculated_scores = avg_series.dropna().to_dict()
+            
+            if calculated_scores:
+                cols_preview = st.columns(min(len(calculated_scores), 5))
+                for i, (subj, score) in enumerate(list(calculated_scores.items())[:5]):
+                    with cols_preview[i]:
+                        st.metric(subj, f"{score:.2f}")
+                if len(calculated_scores) > 5:
+                    st.caption(f"...và {len(calculated_scores)-5} môn khác.")
+            else:
+                st.info("Nhập điểm vào bảng để xem kết quả tính toán.")
+            
+            input_scores = calculated_scores
+            invalid_score_inputs = []
+            not_taken_subjects = set()
 
         with st.expander("📜 Chứng chỉ ngoại ngữ (nếu có)", expanded=missing_targets["certificate"]):
             st.caption("Nhập nếu ngành yêu cầu chứng chỉ IELTS/TOEFL/TOEIC.")
@@ -926,6 +995,7 @@ def render_score_analysis_page():
                 st.session_state.sa_kv_selected = selected_kv
                 st.session_state.sa_ut_selected = selected_ut
                 st.session_state.sa_focus_missing_inputs = []
+                st.session_state.sa_mode = "transcript" if input_mode == "Nhập chi tiết Học bạ (6 học kỳ)" else "exam"
                 st.session_state.sa_step = 2
                 st.rerun()
 
@@ -972,10 +1042,16 @@ def render_score_analysis_page():
 
         top_k = st.selectbox(
             "Số trường gợi ý (Top K):",
-            options=[3, 5, 10, 15],
+            options=[3, 5, 10, 15, 20],
             index=1,
             key="sa_top_k",
         )
+
+        with st.expander("🛠️ Bộ lọc nâng cao (Tùy chọn)", expanded=False):
+            st.markdown("Thu hẹp kết quả tìm kiếm theo sở thích của bạn.")
+            prov_options = ["Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Cần Thơ", "Khác"]
+            filter_province = st.selectbox("📍 Chọn Tỉnh/Thành phố:", prov_options, key="sa_filter_province")
+            filter_major = st.text_input("🎓 Ngành mong muốn (VD: Máy tính, Kinh tế...):", key="sa_filter_major", placeholder="Gõ từ khóa ngành...")
 
         st.markdown("<br>", unsafe_allow_html=True)
         col_back2, col_next2 = st.columns(2)
@@ -988,12 +1064,18 @@ def render_score_analysis_page():
                 mode = _selected_score_mode()
                 methods = ["Xét điểm thi THPT"] if mode == "exam" else ["Xét điểm Học bạ THPT"]
                 payload = _build_score_analysis_payload(mode)
+                
+                prov_val = None if filter_province == "Tất cả" else filter_province
+                major_val = filter_major.strip() if filter_major.strip() else None
+                
                 with st.spinner("⏳ Đang quét dữ liệu điểm chuẩn..."):
                     result = find_top_k_schools(
                         student_scores=payload,
                         methods=methods,
                         k=top_k,
                         bonus=bonus,
+                        province=prov_val,
+                        major=major_val,
                     )
                     st.session_state.sa_mode = mode
                     if mode == "exam":

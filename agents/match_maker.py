@@ -83,6 +83,8 @@ def _find_top_k_schools_legacy(
     bonus: float = 0.0,
     year_priority: list[int] | None = None,
     top_n_combos: int = 5,
+    province: str | None = None,
+    major: str | None = None,
 ) -> dict:
     """
     Tìm Top K trường/ngành phù hợp nhất dựa trên điểm số học sinh.
@@ -161,6 +163,23 @@ def _find_top_k_schools_legacy(
     # --- Filter Step 2: Lọc bỏ ĐGNL (>40), giữ thang 30 và 40 ---
     df_filtered = df_filtered[df_filtered["Điểm chuẩn"] <= 40.0].copy()
     df_filtered = df_filtered[df_filtered["Điểm chuẩn"] > 0.0].copy()
+
+    # --- Lọc theo Ngành (Major) ---
+    if major:
+        df_filtered = df_filtered[df_filtered["Tên ngành"].str.contains(major, case=False, na=False)].copy()
+        
+    # --- Lọc theo Tỉnh/Thành phố ---
+    if province:
+        try:
+            import json
+            json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "university_provinces.json")
+            with open(json_path, 'r', encoding='utf-8') as f:
+                prov_map = json.load(f)
+            # Map province vào dataframe, fillna bằng "Khác"
+            df_filtered["Tỉnh/Thành phố"] = df_filtered["Trường"].map(prov_map).fillna("Khác")
+            df_filtered = df_filtered[df_filtered["Tỉnh/Thành phố"] == province].copy()
+        except Exception as e:
+            warnings.append(f"⚠️ Không thể tải dữ liệu Tỉnh/Thành phố: {e}")
 
     if df_filtered.empty:
         return {
@@ -400,6 +419,8 @@ def find_top_k_schools(
     bonus: float = 0.0,
     year_priority: list[int] | None = None,
     top_n_combos: int = 5,
+    province: str | None = None,
+    major: str | None = None,
 ) -> dict:
     """
     Route exam-only analysis through the deterministic SQLite pipeline.
@@ -408,8 +429,8 @@ def find_top_k_schools(
     behavior until the UI phase separates modes.
     """
     if methods and _is_exam_only(methods):
-        return find_top_k_schools_exam(student_scores, k, bonus, year_priority, top_n_combos)
-    return _find_top_k_schools_legacy(student_scores, methods, k, bonus, year_priority, top_n_combos)
+        return find_top_k_schools_exam(student_scores, k, bonus, year_priority, top_n_combos, province, major)
+    return _find_top_k_schools_legacy(student_scores, methods, k, bonus, year_priority, top_n_combos, province, major)
 
 
 def _is_exam_only(methods: list[str]) -> bool:
