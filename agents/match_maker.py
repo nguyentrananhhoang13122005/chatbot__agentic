@@ -437,6 +437,357 @@ def _is_exam_only(methods: list[str]) -> bool:
     return bool(methods) and all(is_exam_method(method) for method in methods)
 
 
+def _to_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:
+        return None
+    return number
+
+
+def _format_number(value) -> str:
+    number = _to_number(value)
+    if number is None:
+        return _safe_text(value, "")
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _safe_text(value, default: str = "Không rõ") -> str:
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none"}:
+        return default
+    return text
+
+
+def _format_student_admission_score(row) -> str:
+    min_score = _to_number(row.get("Điểm min"))
+    max_score = _to_number(row.get("Điểm của bạn"))
+    if min_score is not None and max_score is not None and abs(min_score - max_score) > 0.001:
+        return f"{_format_number(min_score)} - {_format_number(max_score)}"
+    return _format_number(row.get("Điểm của bạn")) or "Không rõ"
+
+
+def _format_cutoff_score(row) -> str:
+    cutoff = _format_number(row.get("Điểm chuẩn"))
+    if not cutoff:
+        return "Không rõ"
+    year = _safe_text(row.get("Năm"), "")
+    return f"{cutoff} ({year})" if year else cutoff
+
+
+def _format_admission_gap(row) -> str:
+    gap = _to_number(row.get("Delta"))
+    if gap is None:
+        return "chưa đủ dữ liệu để so sánh điểm"
+    if abs(gap) < 0.05:
+        return "xấp xỉ điểm chuẩn"
+    if gap > 0:
+        return f"cao hơn điểm chuẩn {_format_number(abs(gap))} điểm"
+    return f"thấp hơn điểm chuẩn {_format_number(abs(gap))} điểm"
+
+
+def _format_opportunity_label(row) -> str:
+    tier = _safe_text(row.get("Tier"), "")
+    gap = _to_number(row.get("Delta"))
+    if "AN TOÀN" in tier:
+        return "cơ hội cao"
+    if "VỪA SỨC" in tier:
+        return "cạnh tranh vừa"
+    if "THỬ THÁCH" in tier:
+        if gap is not None and gap >= -1.0:
+            return "rủi ro có cơ sở"
+        return "rủi ro cao"
+    return "cần kiểm tra thêm"
+
+
+def _format_list(items, empty_text: str) -> str:
+    if not items:
+        return empty_text
+    return "\n".join(f"- {_safe_text(item)}" for item in items)
+
+
+def _format_user_filters(filters: dict) -> str:
+    if not filters:
+        return "- Chưa có bộ lọc nâng cao."
+    mode_map = {
+        "exam": "Xét điểm thi THPT",
+        "transcript": "Xét điểm học bạ THPT",
+    }
+    mode = mode_map.get(filters.get("mode"), _safe_text(filters.get("mode"), "Không rõ"))
+    province = _safe_text(filters.get("province"), "Tất cả")
+    major = _safe_text(filters.get("major"), "Không chọn")
+    top_k = _safe_text(filters.get("top_k"), "Không rõ")
+    return "\n".join(
+        [
+            f"- Phương thức/mode: {mode}",
+            f"- Top K người dùng chọn: {top_k}",
+            f"- Tỉnh/thành: {province}",
+            f"- Ngành mong muốn: {major}",
+        ]
+    )
+
+
+def _format_combo_for_prompt(combo: dict) -> str:
+    try:
+        return format_combination_display(combo)
+    except (KeyError, TypeError):
+        code = _safe_text(combo.get("code") if isinstance(combo, dict) else None)
+        total = _format_number(combo.get("total") if isinstance(combo, dict) else None)
+        subjects = combo.get("subjects", []) if isinstance(combo, dict) else []
+        subject_text = " + ".join(str(item) for item in subjects) if subjects else "chưa rõ môn"
+        return f"{code}: {subject_text} = {total or 'không rõ'} điểm"
+
+
+def _condition_risk_score(row) -> int:
+    text = " ".join(
+        _safe_text(row.get(col), "")
+        for col in ["Chú thích", "Công thức"]
+    ).lower()
+    risk_terms = [
+        "thiếu",
+        "chưa rõ",
+        "không rõ",
+        "cần",
+        "ielts",
+        "toefl",
+        "sat",
+        "chứng chỉ",
+        "học bạ",
+        "năng khiếu",
+    ]
+    return int(any(term in text for term in risk_terms))
+
+
+def _combo_rank(row, top_combos: list[dict]) -> int:
+    combo = _safe_text(row.get("Tổ hợp khớp"), "")
+    for index, item in enumerate(top_combos):
+        if combo and combo == _safe_text(item.get("code"), ""):
+            return index
+    return len(top_combos) + 1
+
+
+def _filter_match_score(row, filters: dict) -> int:
+    score = 0
+    major = _safe_text(filters.get("major"), "").lower() if filters else ""
+    province = _safe_text(filters.get("province"), "").lower() if filters else ""
+    if major and major in _safe_text(row.get("Tên ngành"), "").lower():
+        score += 1
+    if province and province in _safe_text(row.get("Tỉnh/Thành phố"), "").lower():
+        score += 1
+    return score
+
+
+def _planner_work_frame(result: dict) -> pd.DataFrame:
+    df = result.get("matched_schools", pd.DataFrame())
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return pd.DataFrame()
+    filters = result.get("user_filters", {}) or {}
+    top_combos = result.get("top_combinations", []) or []
+    work = df.copy().reset_index(drop=True)
+    work["__planner_id"] = range(len(work))
+    work["__original_pos"] = range(len(work))
+    work["__gap"] = work["Delta"].apply(_to_number) if "Delta" in work.columns else None
+    work["__filter_score"] = work.apply(lambda row: _filter_match_score(row, filters), axis=1)
+    work["__condition_risk"] = work.apply(_condition_risk_score, axis=1)
+    work["__combo_rank"] = work.apply(lambda row: _combo_rank(row, top_combos), axis=1)
+    return work
+
+
+def _clean_planner_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    internal_cols = [col for col in df.columns if str(col).startswith("__")]
+    return df.drop(columns=internal_cols, errors="ignore").reset_index(drop=True)
+
+
+def _sort_focus_candidates(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    return df.sort_values(
+        by=["__filter_score", "__condition_risk", "__combo_rank", "__gap", "__original_pos"],
+        ascending=[False, True, True, False, True],
+    )
+
+
+def _priority_role(row) -> int:
+    tier = _safe_text(row.get("Tier"), "")
+    gap = _to_number(row.get("__gap"))
+    if "THỬ THÁCH" in tier:
+        return 0 if gap is not None and gap >= -1.0 else 3
+    if "VỪA SỨC" in tier:
+        return 1
+    if "AN TOÀN" in tier:
+        return 2
+    return 4
+
+
+def _sort_priority_order(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    work = df.copy()
+    work["__priority_role"] = work.apply(_priority_role, axis=1)
+    return work.sort_values(
+        by=[
+            "__priority_role",
+            "__filter_score",
+            "__condition_risk",
+            "__combo_rank",
+            "__gap",
+            "__original_pos",
+        ],
+        ascending=[True, False, True, True, False, True],
+    )
+
+
+def _select_focus_schools(result: dict, limit: int = 5, strategy: str = "balanced") -> dict:
+    work = _planner_work_frame(result)
+    if work.empty:
+        empty = pd.DataFrame()
+        return {
+            "focus_schools": empty,
+            "reference_schools": empty,
+            "priority_order": empty,
+            "planner_notes": ["Không có dữ liệu trường/ngành để phân tích sâu."],
+        }
+
+    limit = max(1, min(limit, len(work)))
+    if len(work) <= limit:
+        priority = _sort_priority_order(work)
+        return {
+            "focus_schools": _clean_planner_columns(priority),
+            "reference_schools": pd.DataFrame(),
+            "priority_order": _clean_planner_columns(priority),
+            "planner_notes": [
+                f"Số kết quả thực tế là {len(work)}, nên phân tích toàn bộ danh sách.",
+                f"Chiến lược xếp thứ tự đang dùng: {strategy}.",
+            ],
+        }
+
+    selected_ids: list[int] = []
+    selected_schools: set[str] = set()
+
+    def add_from(pool: pd.DataFrame, desired: int, allow_same_school: bool = False) -> None:
+        if desired <= 0 or pool.empty:
+            return
+        added = 0
+        for _, row in _sort_focus_candidates(pool).iterrows():
+            if len(selected_ids) >= limit or added >= desired:
+                return
+            row_id = int(row["__planner_id"])
+            school = _safe_text(row.get("Trường"), "")
+            if row_id in selected_ids:
+                continue
+            if not allow_same_school and school and school in selected_schools:
+                continue
+            selected_ids.append(row_id)
+            if school:
+                selected_schools.add(school)
+            added += 1
+
+    challenge = work[
+        work["Tier"].astype(str).str.contains("THỬ THÁCH", na=False)
+        & (work["__gap"].fillna(-999) >= -1.0)
+    ]
+    fit = work[work["Tier"].astype(str).str.contains("VỪA SỨC", na=False)]
+    safe = work[work["Tier"].astype(str).str.contains("AN TOÀN", na=False)]
+
+    add_from(challenge, 1)
+    add_from(fit, min(3, max(0, limit - len(selected_ids))))
+    add_from(safe, min(1, max(0, limit - len(selected_ids))))
+
+    remaining = work[~work["__planner_id"].isin(selected_ids)]
+    add_from(remaining, limit - len(selected_ids))
+    if len(selected_ids) < limit:
+        add_from(remaining, limit - len(selected_ids), allow_same_school=True)
+
+    focus = work[work["__planner_id"].isin(selected_ids)]
+    priority = _sort_priority_order(focus)
+    reference = _sort_focus_candidates(work[~work["__planner_id"].isin(selected_ids)])
+    challenge_count = len(focus[focus["Tier"].astype(str).str.contains("THỬ THÁCH", na=False)])
+    fit_count = len(focus[focus["Tier"].astype(str).str.contains("VỪA SỨC", na=False)])
+    safe_count = len(focus[focus["Tier"].astype(str).str.contains("AN TOÀN", na=False)])
+
+    return {
+        "focus_schools": _clean_planner_columns(priority),
+        "reference_schools": _clean_planner_columns(reference),
+        "priority_order": _clean_planner_columns(priority),
+        "planner_notes": [
+            f"Số kết quả thực tế là {len(work)}, hệ thống chọn {len(focus)} lựa chọn để phân tích sâu.",
+            (
+                "Chiến lược mặc định balanced: ưu tiên có lựa chọn thử thách có cơ sở, "
+                "nhóm vừa sức làm nòng cốt và nhóm an toàn làm backup."
+            ),
+            (
+                "Cơ cấu danh sách phân tích sâu: "
+                f"{challenge_count} thử thách, {fit_count} vừa sức, {safe_count} an toàn."
+            ),
+            "Ngưỡng thử thách có cơ sở: thấp hơn điểm chuẩn không quá 1.0 điểm.",
+        ],
+    }
+
+
+def _format_school_rows(df: pd.DataFrame, empty_text: str = "(Không có dữ liệu)") -> str:
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return empty_text
+    lines: list[str] = []
+    for index, (_, row) in enumerate(df.iterrows(), start=1):
+        school = _safe_text(row.get("Trường"))
+        major = _safe_text(row.get("Tên ngành"))
+        method = _safe_text(row.get("Phương thức xét tuyển"))
+        combo = _safe_text(row.get("Tổ hợp khớp"))
+        tier = _safe_text(row.get("Tier"))
+        note = _safe_text(row.get("Chú thích"), "")
+        formula = _safe_text(row.get("Công thức"), "")
+        detail_parts = [
+            f"Phương thức: {method}",
+            f"Tổ hợp khớp: {combo}",
+            f"Điểm của học sinh: {_format_student_admission_score(row)}",
+            f"Điểm chuẩn: {_format_cutoff_score(row)}",
+            f"Chênh lệch điểm: {_format_admission_gap(row)}",
+            f"Nhóm: {tier}",
+            f"Mức cơ hội định tính: {_format_opportunity_label(row)}",
+        ]
+        if note:
+            detail_parts.append(f"Chú thích: {note}")
+        if formula:
+            detail_parts.append(f"Công thức: {formula}")
+        lines.append(f"{index}. {school} - {major}\n   - " + "\n   - ".join(detail_parts))
+    return "\n".join(lines)
+
+
+def _format_reference_rows(df: pd.DataFrame) -> str:
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return "Không có danh sách tham khảo thêm."
+    lines = []
+    for index, (_, row) in enumerate(df.iterrows(), start=1):
+        lines.append(
+            f"{index}. {_safe_text(row.get('Trường'))} - {_safe_text(row.get('Tên ngành'))} "
+            f"({_safe_text(row.get('Tier'))}; {_format_admission_gap(row)})"
+        )
+    return "\n".join(lines)
+
+
+def _format_priority_order(df: pd.DataFrame) -> str:
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return "Không có thứ tự nguyện vọng đề xuất."
+    lines = []
+    for index, (_, row) in enumerate(df.iterrows(), start=1):
+        lines.append(
+            f"{index}. {_safe_text(row.get('Trường'))} - {_safe_text(row.get('Tên ngành'))}: "
+            f"{_format_opportunity_label(row)}, {_format_admission_gap(row)}"
+        )
+    return "\n".join(lines)
+
+
 def build_analysis_prompt(result: dict) -> str:
     """
     Xây dựng System Prompt cho LLM phân tích kết quả matching.
@@ -445,58 +796,89 @@ def build_analysis_prompt(result: dict) -> str:
     strength = result.get("strength", {})
     top_combos = result.get("top_combinations", [])
     df = result.get("matched_schools", pd.DataFrame())
+    planner = _select_focus_schools(result)
 
-    # Format điểm số
-    score_lines = "\n".join(f"  - {subj}: {score}" for subj, score in scores.items())
+    score_lines = "\n".join(
+        f"- {subject}: {_format_number(score)}"
+        for subject, score in scores.items()
+    ) or "- Không có dữ liệu điểm."
 
-    # Format tổ hợp
     combo_lines = "\n".join(
-        f"  {i+1}. {format_combination_display(c)}"
-        for i, c in enumerate(top_combos[:5])
-    )
+        f"{i + 1}. {_format_combo_for_prompt(combo)}"
+        for i, combo in enumerate(top_combos[:5])
+    ) or "Không có tổ hợp đủ dữ liệu."
 
-    # Format bảng trường
-    if not df.empty:
-        school_lines = df.to_string(index=False)
-    else:
-        school_lines = "(Không có dữ liệu)"
+    total_displayed = len(df) if isinstance(df, pd.DataFrame) else 0
+    total_found = result.get("total_found", total_displayed)
+    filters_text = _format_user_filters(result.get("user_filters", {}) or {})
+    warning_text = _format_list(result.get("warnings", []), "Không có cảnh báo.")
+    missing_text = _format_list(result.get("missing_inputs", []), "Không có dữ liệu điều kiện còn thiếu.")
+    focus_lines = _format_school_rows(planner["focus_schools"])
+    reference_lines = _format_reference_rows(planner["reference_schools"])
+    priority_lines = _format_priority_order(planner["priority_order"])
+    planner_notes = _format_list(planner["planner_notes"], "Không có ghi chú planner.")
 
-    # Format warnings
-    warnings = result.get("warnings", [])
-    warning_text = "\n".join(warnings) if warnings else "Không có cảnh báo."
+    prompt = f"""Bạn là chuyên gia tư vấn tuyển sinh đại học cho học sinh lớp 12.
 
-    prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH ĐẠI HỌC SENIOR với 15+ năm kinh nghiệm.
+Mục tiêu: giúp học sinh hiểu nên ưu tiên trường/ngành nào, vì sao phù hợp, mức cạnh tranh ra sao và cần backup thế nào. Chỉ tư vấn dựa trên dữ liệu bên dưới.
 
-## DỮ LIỆU HỌC SINH
-### Bảng điểm:
+## Dữ liệu học sinh
+### Bảng điểm
 {score_lines}
 
-### Điểm trung bình: {strength.get('avg', 0)}
-### Xu hướng năng lực: {strength.get('category', 'Chưa xác định')}
-### Môn mạnh nhất: {', '.join(strength.get('strongest', []))}
-### Môn yếu nhất: {', '.join(strength.get('weakest', []))}
+### Tổng quan năng lực
+- Điểm trung bình: {_format_number(strength.get('avg', 0))}
+- Xu hướng năng lực: {_safe_text(strength.get('category'), 'Chưa xác định')}
+- Môn mạnh nhất: {', '.join(strength.get('strongest', [])) or 'Chưa xác định'}
+- Môn yếu nhất: {', '.join(strength.get('weakest', [])) or 'Chưa xác định'}
 
-### Top tổ hợp khối thi mạnh nhất:
+### Top tổ hợp mạnh nhất
 {combo_lines}
 
-## BẢNG TOP TRƯỜNG PHÙ HỢP (từ dữ liệu điểm chuẩn thực tế):
-{school_lines}
+### Bối cảnh người dùng đã chọn
+{filters_text}
 
-## CẢNH BÁO:
+## Dữ liệu trường/ngành
+- Số kết quả đang hiển thị theo Top K: {total_displayed}
+- Tổng số trường/ngành phù hợp trước khi cắt Top K: {total_found}
+
+### Danh sách phân tích sâu do hệ thống chọn
+{focus_lines}
+
+### Danh sách tham khảo/dự phòng còn lại
+{reference_lines}
+
+### Thứ tự nguyện vọng đề xuất bởi hệ thống
+{priority_lines}
+
+### Ghi chú planner
+{planner_notes}
+
+## Cảnh báo và điều kiện phụ
+### Cảnh báo
 {warning_text}
 
-## NHIỆM VỤ CỦA BẠN:
-Hãy phân tích và tư vấn CHI TIẾT cho học sinh theo cấu trúc sau:
+### Điều kiện/dữ liệu còn thiếu
+{missing_text}
 
-1. **📊 Phân tích Học lực**: Đánh giá thế mạnh/điểm yếu dựa trên bảng điểm. Em mạnh nhóm môn nào?
-2. **🏆 Giải thích Top Trường**: Với MỖI trường trong bảng, giải thích TẠI SAO nó phù hợp. So sánh Delta (khoảng cách điểm), mức độ an toàn.
-3. **💡 Chiến lược Xét tuyển**: Gợi ý cách phân bổ nguyện vọng thông minh (trường an toàn + trường vừa sức + trường thử thách).
-4. **⚠️ Lưu ý**: Nhắc về quy chế 2026 nếu có điều quan trọng.
+## Nhiệm vụ trả lời
+Viết tư vấn bằng tiếng Việt, hướng tới học sinh lớp 12. Cấu trúc bắt buộc:
 
-QUY TẮC:
-- KHÔNG được bịa thêm tên trường hay con số ngoài bảng dữ liệu.
-- Dùng emoji vừa phải, ngôn ngữ thân thiện, dễ hiểu.
-- Viết bằng tiếng Việt."""
+1. **Tóm tắt năng lực**: nêu môn mạnh, tổ hợp lợi thế và điểm cần lưu ý.
+2. **Phân tích các lựa chọn chính**: phân tích từng lựa chọn trong "Danh sách phân tích sâu"; giải thích vì sao phù hợp hoặc vì sao rủi ro dựa trên ngành, tổ hợp, điểm chuẩn, Chênh lệch điểm, nhóm cạnh tranh, phương thức xét tuyển và điều kiện phụ.
+3. **Thứ tự nguyện vọng nên ưu tiên**: dùng đúng thứ tự hệ thống đề xuất, kèm lý do ngắn cho từng dòng.
+4. **Roadmap backup**: nêu nhóm an toàn/vừa sức/thử thách nên dùng thế nào, và nhắc ngắn các lựa chọn tham khảo nếu có.
+5. **Lưu ý cần kiểm tra**: nhắc cảnh báo, điều kiện phụ, dữ liệu còn thiếu hoặc quy chế liên quan nếu có.
+
+## Quy tắc bắt buộc
+- Không tự chọn lại danh sách phân tích sâu.
+- Không tự đảo thứ tự nguyện vọng đề xuất, trừ khi phát hiện mâu thuẫn dữ liệu nghiêm trọng; nếu có mâu thuẫn, phải nói rõ mâu thuẫn.
+- Không thêm trường, ngành, học phí, ranking, danh tiếng, chỉ tiêu hoặc số liệu ngoài dữ liệu đã cung cấp.
+- Không đưa xác suất đỗ dạng phần trăm. Nếu nói về cơ hội, chỉ dùng mức định tính: cơ hội cao, cạnh tranh vừa, rủi ro có cơ sở, rủi ro cao.
+- Luôn gọi khoảng cách điểm là `Chênh lệch điểm`; không dùng thuật ngữ kỹ thuật nội bộ.
+- Giữ đúng 3 nhóm cạnh tranh hiện có: an toàn, vừa sức, thử thách.
+- Không kết luận chắc chắn đỗ/trượt; chỉ tư vấn chiến lược dựa trên dữ liệu điểm chuẩn.
+- Viết ngắn gọn nhưng đủ lý do, ưu tiên tính hành động."""
 
     return prompt
 
@@ -517,5 +899,5 @@ def generate_analysis_stream(result: dict, chat_history: list = None):
         messages=messages,
         model=OPENROUTER_FALLBACK_MODELS[0],
         temperature=0.3,
-        max_tokens=2000,
+        max_tokens=3000,
     )
