@@ -622,6 +622,37 @@ def _format_annotation(row) -> str:
     return annotation
 
 
+def _format_admission_gap_for_chat(row) -> str:
+    gap = _to_float(row.get("Delta"))
+    if gap is None:
+        return "chưa đủ dữ liệu để so sánh điểm"
+    if abs(gap) < 0.05:
+        return "xấp xỉ điểm chuẩn"
+    if gap > 0:
+        return f"cao hơn điểm chuẩn {_format_score_number(abs(gap))} điểm"
+    return f"thấp hơn điểm chuẩn {_format_score_number(abs(gap))} điểm"
+
+
+def _format_school_context_for_chat(df) -> str:
+    if df is None or df.empty:
+        return "Không có dữ liệu trường/ngành phù hợp."
+
+    lines = []
+    for index, (_, row) in enumerate(df.iterrows(), start=1):
+        pieces = [
+            f"{index}. {row.get('Trường', 'Không rõ')} - {row.get('Tên ngành', 'Không rõ')}",
+            f"Điểm chuẩn: {_format_cutoff(row)}",
+            f"Điểm của học sinh: {_format_score_range(row)}",
+            f"Chênh lệch điểm: {_format_admission_gap_for_chat(row)}",
+            f"Nhóm: {row.get('Tier', 'Không rõ')}",
+        ]
+        year = row.get("Năm")
+        if year is not None and str(year).strip().lower() not in {"", "nan", "none"}:
+            pieces.append(f"Năm: {year}")
+        lines.append(" | ".join(pieces))
+    return "\n".join(lines)
+
+
 def _prepare_school_display(df):
     display_df = df.copy()
     if "Điểm của bạn" in display_df.columns:
@@ -1077,6 +1108,13 @@ def render_score_analysis_page():
                         province=prov_val,
                         major=major_val,
                     )
+                    result.setdefault("user_filters", {})
+                    result["user_filters"].update({
+                        "province": prov_val,
+                        "major": major_val,
+                        "top_k": top_k,
+                        "mode": mode,
+                    })
                     st.session_state.sa_mode = mode
                     if mode == "exam":
                         st.session_state.sa_exam_result = result
@@ -1224,8 +1262,11 @@ def render_score_analysis_page():
             if st.button("💬 Hỏi thêm AI", key="sa_to_chat", use_container_width=True, type="primary"):
                 # Inject context vào chat
                 if df is not None and not df.empty:
-                    context_cols = [col for col in ["Trường", "Tên ngành", "Điểm chuẩn", "Delta", "Tier", "Năm"] if col in df.columns]
-                    context_msg = f"[Kết quả phân tích xét tuyển]\nĐiểm: {scores}\nTop trường: {df[context_cols].to_string(index=False)}"
+                    context_msg = (
+                        "[Kết quả phân tích xét tuyển]\n"
+                        f"Điểm: {scores}\n"
+                        f"Top trường:\n{_format_school_context_for_chat(df)}"
+                    )
                     if "messages" not in st.session_state:
                         st.session_state.messages = []
                     st.session_state.messages.append({"role": "assistant", "content": context_msg})

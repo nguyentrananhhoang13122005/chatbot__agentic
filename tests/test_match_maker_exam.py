@@ -239,3 +239,84 @@ def test_rule_cache_is_warmed_for_exam_rows(admission_db, monkeypatch, tmp_path)
     cache_count = conn.execute("SELECT count(*) FROM admission_rule_cache").fetchone()[0]
     conn.close()
     assert cache_count >= 6
+
+
+def test_focus_school_planner_uses_balanced_strategy_without_risky_challenge():
+    import pandas as pd
+    import agents.match_maker as match_maker
+
+    result = {
+        "scores": {"Toán": 8.5, "Vật lý": 8.0, "Hóa học": 8.0},
+        "top_combinations": [{"code": "A00", "total": 24.5, "subjects": ["Toán", "Vật lý", "Hóa học"]}],
+        "user_filters": {"major": "Công nghệ", "province": None, "top_k": 10, "mode": "exam"},
+        "matched_schools": pd.DataFrame(
+            [
+                ["Trường Mơ Ước", "Công nghệ thông tin", "Xét điểm thi THPT", 25.0, "A00", 24.5, 24.5, -0.5, "🎯 THỬ THÁCH", 2025],
+                ["Trường Rủi Ro", "Công nghệ phần mềm", "Xét điểm thi THPT", 26.0, "A00", 24.5, 24.5, -1.5, "🎯 THỬ THÁCH", 2025],
+                ["Trường Vừa 1", "Công nghệ dữ liệu", "Xét điểm thi THPT", 24.0, "A00", 24.5, 24.5, 0.5, "⚡ VỪA SỨC", 2025],
+                ["Trường Vừa 2", "Công nghệ AI", "Xét điểm thi THPT", 23.8, "A00", 24.5, 24.5, 0.7, "⚡ VỪA SỨC", 2025],
+                ["Trường Vừa 3", "Công nghệ máy tính", "Xét điểm thi THPT", 23.5, "A00", 24.5, 24.5, 1.0, "⚡ VỪA SỨC", 2025],
+                ["Trường An Toàn", "Hệ thống thông tin", "Xét điểm thi THPT", 22.0, "A00", 24.5, 24.5, 2.5, "✅ AN TOÀN", 2025],
+            ],
+            columns=[
+                "Trường",
+                "Tên ngành",
+                "Phương thức xét tuyển",
+                "Điểm chuẩn",
+                "Tổ hợp khớp",
+                "Điểm min",
+                "Điểm của bạn",
+                "Delta",
+                "Tier",
+                "Năm",
+            ],
+        ),
+    }
+
+    planner = match_maker._select_focus_schools(result)
+    focus = planner["focus_schools"]
+
+    assert len(focus) == 5
+    assert "Trường Mơ Ước" in set(focus["Trường"])
+    assert "Trường Rủi Ro" not in set(focus["Trường"])
+    assert len(planner["reference_schools"]) == 1
+
+
+def test_analysis_prompt_uses_user_friendly_gap_and_no_percentage_probability():
+    import pandas as pd
+    import agents.match_maker as match_maker
+
+    result = {
+        "scores": {"Toán": 8.0, "Ngữ văn": 7.0, "Tiếng Anh": 8.5},
+        "strength": {"avg": 7.83, "category": "Khá", "strongest": ["Tiếng Anh"], "weakest": ["Ngữ văn"]},
+        "top_combinations": [{"code": "D01", "total": 23.5, "subjects": ["Toán", "Ngữ văn", "Tiếng Anh"]}],
+        "warnings": ["Kiểm tra kỹ điều kiện phụ nếu trường yêu cầu chứng chỉ."],
+        "missing_inputs": ["IELTS"],
+        "user_filters": {"major": "Ngôn ngữ", "province": "Hà Nội", "top_k": 5, "mode": "exam"},
+        "matched_schools": pd.DataFrame(
+            [
+                ["Trường A", "Ngôn ngữ Anh", "Xét điểm thi THPT", 23.0, "D01", 23.5, 23.5, 0.5, "⚡ VỪA SỨC", 2025],
+                ["Trường B", "Ngôn ngữ Trung", "Xét điểm thi THPT", 22.0, "D01", 23.5, 23.5, 1.5, "✅ AN TOÀN", 2025],
+            ],
+            columns=[
+                "Trường",
+                "Tên ngành",
+                "Phương thức xét tuyển",
+                "Điểm chuẩn",
+                "Tổ hợp khớp",
+                "Điểm min",
+                "Điểm của bạn",
+                "Delta",
+                "Tier",
+                "Năm",
+            ],
+        ),
+    }
+
+    prompt = match_maker.build_analysis_prompt(result)
+
+    assert "Delta" not in prompt
+    assert "Chênh lệch điểm" in prompt
+    assert "cao hơn điểm chuẩn 0.5 điểm" in prompt
+    assert "phần trăm" in prompt
+    assert "IELTS" in prompt
