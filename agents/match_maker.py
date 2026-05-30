@@ -676,7 +676,6 @@ def _select_focus_schools(result: dict, limit: int = 5, strategy: str = "balance
     selected_schools: set[str] = set()
 
     def add_from(pool: pd.DataFrame, desired: int, allow_same_school: bool = False) -> None:
-        nonlocal selected_ids, selected_schools
         if desired <= 0 or pool.empty:
             return
         added = 0
