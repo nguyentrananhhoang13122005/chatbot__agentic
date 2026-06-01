@@ -77,7 +77,9 @@ def find_top_k_schools_exam(
         
     # --- Lọc theo Ngành (Major) ---
     if major:
-        rows = [r for r in rows if major.lower() in r.ten_nganh.lower()]
+        from utils.method_normalizer import normalize_method
+        major_norm = normalize_method(major)
+        rows = [r for r in rows if major_norm in normalize_method(r.ten_nganh)]
         
     # --- Lọc theo Tỉnh/Thành phố ---
     if province:

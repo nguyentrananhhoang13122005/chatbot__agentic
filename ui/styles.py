@@ -118,8 +118,11 @@ def load_custom_css():
     [data-testid="stDecoration"] {
         display: none !important;
     }
-    [data-testid="stToolbar"] {
-        background: transparent !important;
+    [data-testid="stToolbar"], 
+    .stAppDeployButton,
+    [data-testid="stStatusWidget"],
+    #MainMenu {
+        display: none !important;
     }
 
     /* === HIDE components.html() zero-height iframes (anti-flash scripts) === */
@@ -1781,6 +1784,110 @@ def load_custom_css():
         color: var(--sa-combo-color);
         font-size: 0.75em;
         font-weight: 700;
+    }
+
+    /* --- Custom Responsive Table (Tuyensinh247 Style) --- */
+    .ts247-container {
+        width: 100%;
+        margin-top: var(--sp-16);
+        margin-bottom: var(--sp-24);
+        font-size: 14px;
+        color: var(--text);
+    }
+    .ts247-table {
+        display: table;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .ts247-thead {
+        display: table-header-group;
+        background: rgba(44, 64, 167, 0.08);
+        font-weight: 700;
+    }
+    html[data-theme="dark"] .ts247-thead {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    .ts247-tbody {
+        display: table-row-group;
+    }
+    .ts247-tr {
+        display: table-row;
+        border-bottom: 1px solid var(--border);
+    }
+    .ts247-th, .ts247-td {
+        display: table-cell;
+        padding: 12px 16px;
+        text-align: left;
+        vertical-align: middle;
+    }
+    .ts247-th {
+        border-bottom: 2px solid var(--border);
+    }
+    .ts247-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        white-space: nowrap;
+        text-align: center;
+        min-width: 100px;
+    }
+    .ts247-badge-safe { background-color: #10B981; } /* Xanh */
+    .ts247-badge-warning { background-color: #F59E0B; } /* Vàng */
+    .ts247-badge-danger { background-color: #EF4444; } /* Đỏ */
+
+    .ts247-td-label {
+        display: none; /* Hide on desktop */
+        font-weight: 600;
+        margin-right: 8px;
+        color: var(--text);
+        opacity: 0.7;
+    }
+
+    @media (max-width: 768px) {
+        .ts247-table, .ts247-thead, .ts247-tbody, .ts247-th, .ts247-td, .ts247-tr {
+            display: block;
+        }
+        .ts247-thead {
+            display: none;
+        }
+        .ts247-tr {
+            margin-bottom: 16px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            background: var(--surface);
+            box-shadow: 2px 2px 0px var(--border);
+            padding: 16px;
+        }
+        .ts247-td {
+            border: none;
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .ts247-td:first-child {
+            border-bottom: 1px dashed var(--border);
+            padding-bottom: 12px;
+            margin-bottom: 8px;
+            font-weight: 800;
+            font-size: 18px;
+            color: var(--primary);
+            justify-content: flex-start;
+        }
+        .ts247-td-label {
+            display: inline-block;
+        }
+        .ts247-td-content {
+            text-align: right;
+            flex: 1;
+            font-weight: 500;
+        }
+        .ts247-td:first-child .ts247-td-content {
+            text-align: left;
+        }
     }
 
     /* --- Profile Page (Dark Mode) --- */

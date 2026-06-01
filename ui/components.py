@@ -376,13 +376,9 @@ def render_home_page():
         """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    _, c_chat, c_score, _ = st.columns([0.8, 1, 1, 0.8])
-    with c_chat:
-        if st.button("💬 Bắt đầu trò chuyện", use_container_width=True, type="primary"):
-            st.session_state.page = "chat"
-            st.rerun()
+    _, c_score, _ = st.columns([1, 1, 1])
     with c_score:
-        if st.button("📊 Phân tích Học bạ", use_container_width=True, type="secondary"):
+        if st.button("📊 Phân tích Học bạ", use_container_width=True, type="primary"):
             st.session_state.page = "score_analysis"
             st.rerun()
 
@@ -654,31 +650,68 @@ def _format_school_context_for_chat(df) -> str:
 
 
 def _prepare_school_display(df):
+    import pandas as pd
     display_df = df.copy()
-    if "Điểm của bạn" in display_df.columns:
-        display_df["Điểm của bạn"] = display_df.apply(_format_score_range, axis=1)
-    if "Điểm chuẩn" in display_df.columns:
-        display_df["Điểm chuẩn"] = display_df.apply(_format_cutoff, axis=1)
-    if "Chú thích" in display_df.columns:
-        display_df["Chú thích"] = display_df.apply(_format_annotation, axis=1)
-    for col in ["Thang_40", "Điểm min", "Delta"]:
-        if col in display_df.columns:
-            display_df = display_df.drop(columns=[col])
+    
+    # 1. Gộp Tên ngành và Mã ngành
+    if "Mã ngành" in display_df.columns and "Tên ngành" in display_df.columns:
+        display_df["Ngành (Mã)"] = display_df.apply(
+            lambda r: f"{r['Tên ngành']} ({r['Mã ngành']})" if pd.notna(r['Mã ngành']) and str(r['Mã ngành']).strip() else r['Tên ngành'], 
+            axis=1
+        )
+    else:
+        display_df["Ngành (Mã)"] = display_df.get("Tên ngành", display_df.get("Mã ngành", ""))
 
+    # 2. Gộp Điểm chuẩn và Năm/Thang điểm
+    def format_new_cutoff(row):
+        cutoff = _format_score_number(row.get("Điểm chuẩn"))
+        if not cutoff: return ""
+        details = []
+        if "Thang_40" in row:
+             scale_flag = str(row.get("Thang_40", "")).strip().lower()
+             is_thang_40 = bool(row.get("Thang_40")) and scale_flag not in {"false", "0", "nan", "none"}
+             if is_thang_40: details.append("Thang 40")
+        year = row.get("Năm")
+        if year is not None and str(year).strip().lower() not in {"", "nan", "none"}:
+            try:
+                details.append(str(int(float(year))))
+            except:
+                details.append(str(year))
+        
+        if details:
+            return f"{cutoff} ({', '.join(details)})"
+        return cutoff
+
+    if "Điểm chuẩn" in display_df.columns:
+        display_df["Điểm chuẩn năm trước"] = display_df.apply(format_new_cutoff, axis=1)
+
+    # 3. Gộp Điểm của bạn và Tổ hợp môn
+    def format_new_user_score(row):
+        score_str = _format_score_range(row)
+        combo = row.get("Tổ hợp khớp", "")
+        if combo and str(combo).strip():
+            return f"{score_str} ({combo})"
+        return score_str
+
+    if "Điểm của bạn" in display_df.columns:
+        display_df["Điểm của bạn (Tổ hợp)"] = display_df.apply(format_new_user_score, axis=1)
+
+    # 4. Đổi tên cột Tier
+    if "Tier" in display_df.columns:
+        display_df["Đánh giá"] = display_df["Tier"]
+
+    # 5. Chọn lọc và sắp xếp các cột tinh gọn nhất
     ordered = [
         "Trường",
-        "Mã ngành",
-        "Tên ngành",
+        "Ngành (Mã)",
         "Phương thức xét tuyển",
-        "Điểm chuẩn",
-        "Tổ hợp khớp",
-        "Điểm của bạn",
-        "Tier",
-        "Năm",
-        "Chú thích",
-        "Công thức",
+        "Điểm chuẩn năm trước",
+        "Điểm của bạn (Tổ hợp)",
+        "Đánh giá"
     ]
-    return display_df[[col for col in ordered if col in display_df.columns] + [col for col in display_df.columns if col not in ordered]]
+    
+    final_cols = [col for col in ordered if col in display_df.columns]
+    return display_df[final_cols]
 
 
 @st.dialog("Nhập thêm thông tin để xét thêm ngành", width="small")
@@ -784,28 +817,14 @@ def render_score_analysis_page():
     if step == 1:
         st.markdown("### 📝 Nhập điểm từng môn")
 
-        # --- OCR Upload ---
-        with st.expander("📸 Tải ảnh Học bạ để AI tự nhận diện (tùy chọn)", expanded=False):
-            uploaded_file = st.file_uploader(
-                "Chọn ảnh hoặc PDF học bạ:",
-                type=["jpg", "jpeg", "png", "pdf"],
-                key="sa_file_upload"
-            )
-            if uploaded_file and st.button("🔍 AI Quét tự động", key="sa_ocr_btn", type="primary"):
-                with st.spinner("⏳ Đang quét ảnh bằng AI..."):
-                    raw_ocr = doc_file(uploaded_file)
-                    if raw_ocr and not raw_ocr.startswith("[LOI"):
-                        parsed = parse_scores_to_json(raw_ocr)
-                        if parsed:
-                            st.session_state.sa_scores = parsed
-                            st.session_state.sa_not_taken_subjects = set()
-                            _clear_score_input_widgets()
-                            st.success(f"✅ AI đã nhận diện được {len(parsed)} môn! Kiểm tra và chỉnh sửa bên dưới.")
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ AI không trích xuất được điểm. Vui lòng nhập thủ công.")
-                    else:
-                        st.error("❌ Không đọc được file. Vui lòng thử lại hoặc nhập thủ công.")
+        input_mode = st.radio(
+            "Chọn phương thức nhập điểm:",
+            ["Nhập điểm thi / Trung bình môn", "Nhập chi tiết Học bạ (6 học kỳ)"],
+            horizontal=True,
+            key="sa_input_mode_radio"
+        )
+
+
 
         st.markdown("---")
         st.markdown('<span id="sa-score-input-anchor"></span>', unsafe_allow_html=True)
@@ -825,12 +844,7 @@ def render_score_analysis_page():
         not_taken_subjects = set()
         invalid_score_inputs = []
 
-        input_mode = st.radio(
-            "Chọn phương thức nhập điểm:",
-            ["Nhập điểm thi / Trung bình môn", "Nhập chi tiết Học bạ (6 học kỳ)"],
-            horizontal=True,
-            key="sa_input_mode_radio"
-        )
+
 
         if input_mode == "Nhập điểm thi / Trung bình môn":
             st.markdown("**Nhập điểm thủ công** *(thang 10)*")
@@ -892,7 +906,12 @@ def render_score_analysis_page():
             if "sa_transcript_df" not in st.session_state:
                 cols = ["HK1 Lớp 10", "HK2 Lớp 10", "HK1 Lớp 11", "HK2 Lớp 11", "HK1 Lớp 12", "HK2 Lớp 12"]
                 subjects_to_show = MAIN_SUBJECTS + ["Tin học", "Công nghệ"]
-                st.session_state.sa_transcript_df = pd.DataFrame(0.0, index=subjects_to_show, columns=cols)
+                df_init = pd.DataFrame(0.0, index=subjects_to_show, columns=cols)
+                df_init = df_init.reset_index(names=["Môn"])
+                st.session_state.sa_transcript_df = df_init
+            elif "Môn" not in st.session_state.sa_transcript_df.columns:
+                # Migrate existing session state to new schema
+                st.session_state.sa_transcript_df = st.session_state.sa_transcript_df.reset_index(names=["Môn"])
             
             formula = st.selectbox(
                 "Cách tính điểm trung bình xét tuyển:",
@@ -904,18 +923,37 @@ def render_score_analysis_page():
                 key="sa_transcript_formula"
             )
 
-            edited_df = st.data_editor(
-                st.session_state.sa_transcript_df,
-                use_container_width=True,
-                num_rows="fixed",
-                hide_index=False,
-                column_config={
-                    col: st.column_config.NumberColumn(
-                        col, min_value=0.0, max_value=10.0, step=0.1, format="%.1f"
-                    ) for col in st.session_state.sa_transcript_df.columns
-                }
+            import streamlit.components.v1 as components
+            import os
+
+            df_current = st.session_state.sa_transcript_df
+            initial_data = {}
+            for _, row in df_current.iterrows():
+                subj = row["Môn"]
+                initial_data[subj] = {col: float(row[col]) for col in df_current.columns if col != "Môn"}
+
+            _component_func = components.declare_component(
+                "transcript_editor",
+                path=os.path.join(os.path.dirname(__file__), "transcript_editor")
             )
-            st.session_state.sa_transcript_df = edited_df
+
+            component_value = _component_func(
+                subjects=df_current["Môn"].tolist(), 
+                initial_data=initial_data, 
+                key="custom_transcript"
+            )
+
+            if component_value is not None:
+                for subj, scores in component_value.items():
+                    idx = df_current.index[df_current["Môn"] == subj].tolist()
+                    if idx:
+                        for sem, score in scores.items():
+                            if sem in df_current.columns:
+                                df_current.loc[idx[0], sem] = float(score)
+                st.session_state.sa_transcript_df = df_current
+                edited_df = df_current
+            else:
+                edited_df = df_current
             
             st.markdown("---")
             st.markdown("**Kết quả tính Điểm Trung Bình:**")
@@ -927,17 +965,18 @@ def render_score_analysis_page():
             else:
                 cols_to_calc = ["HK1 Lớp 12", "HK2 Lớp 12"]
 
-            df_calc = edited_df[cols_to_calc].replace(0.0, np.nan)
+            df_calc = edited_df.set_index("Môn")[cols_to_calc].replace(0.0, np.nan)
             avg_series = df_calc.mean(axis=1).round(2)
             calculated_scores = avg_series.dropna().to_dict()
             
             if calculated_scores:
-                cols_preview = st.columns(min(len(calculated_scores), 5))
-                for i, (subj, score) in enumerate(list(calculated_scores.items())[:5]):
-                    with cols_preview[i]:
-                        st.metric(subj, f"{score:.2f}")
-                if len(calculated_scores) > 5:
-                    st.caption(f"...và {len(calculated_scores)-5} môn khác.")
+                items = list(calculated_scores.items())
+                for i in range(0, len(items), 5):
+                    chunk = items[i:i+5]
+                    cols_preview = st.columns(5)
+                    for j, (subj, score) in enumerate(chunk):
+                        with cols_preview[j]:
+                            st.metric(subj, f"{score:.2f}")
             else:
                 st.info("Nhập điểm vào bảng để xem kết quả tính toán.")
             
@@ -1206,21 +1245,73 @@ def render_score_analysis_page():
         df = result.get("matched_schools")
         if df is not None and not df.empty:
             display_df = _prepare_school_display(df)
+            # --- CUSTOM RESPONSIVE TABLE ---
+            html_rows = []
+            for _, row in display_df.iterrows():
+                truong = html.escape(str(row.get("Trường", "")))
+                nganh = html.escape(str(row.get("Ngành (Mã)", "")))
+                ptxt = html.escape(str(row.get("Phương thức xét tuyển", "")))
+                diem_chuan = html.escape(str(row.get("Điểm chuẩn năm trước", "")))
+                diem_ban = html.escape(str(row.get("Điểm của bạn (Tổ hợp)", "")))
+                tier = str(row.get("Đánh giá", ""))
                 
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Chú thích": st.column_config.TextColumn("Chú thích", width="large"),
-                    "Công thức": st.column_config.TextColumn("Công thức", width="large"),
-                    "Tên ngành": st.column_config.TextColumn("Tên ngành", width="medium"),
-                },
-            )
+                # Determine tier color
+                tier_upper = tier.upper()
+                if "AN TOÀN" in tier_upper:
+                    badge_class = "ts247-badge-safe"
+                elif "VỪA SỨC" in tier_upper:
+                    badge_class = "ts247-badge-warning"
+                else:
+                    badge_class = "ts247-badge-danger"
+                
+                tier_html = f'<span class="ts247-badge {badge_class}">{html.escape(tier)}</span>'
+                
+                html_rows.append(f"""<div class="ts247-tr">
+    <div class="ts247-td">
+        <span class="ts247-td-content">{truong}</span>
+    </div>
+    <div class="ts247-td">
+        <span class="ts247-td-label">Ngành:</span>
+        <span class="ts247-td-content">{nganh}</span>
+    </div>
+    <div class="ts247-td">
+        <span class="ts247-td-label">PTXT:</span>
+        <span class="ts247-td-content">{ptxt}</span>
+    </div>
+    <div class="ts247-td">
+        <span class="ts247-td-label">Điểm chuẩn:</span>
+        <span class="ts247-td-content">{diem_chuan}</span>
+    </div>
+    <div class="ts247-td">
+        <span class="ts247-td-label">Điểm của bạn:</span>
+        <span class="ts247-td-content">{diem_ban}</span>
+    </div>
+    <div class="ts247-td">
+        <span class="ts247-td-label">Đánh giá:</span>
+        <span class="ts247-td-content">{tier_html}</span>
+    </div>
+</div>""")
+            
+            table_html = f"""<div class="ts247-container">
+    <div class="ts247-table">
+        <div class="ts247-thead">
+            <div class="ts247-tr">
+                <div class="ts247-th">Trường</div>
+                <div class="ts247-th">Ngành (Mã)</div>
+                <div class="ts247-th">Phương thức xét tuyển</div>
+                <div class="ts247-th">Điểm chuẩn năm trước</div>
+                <div class="ts247-th">Điểm của bạn (Tổ hợp)</div>
+                <div class="ts247-th">Đánh giá</div>
+            </div>
+        </div>
+        <div class="ts247-tbody">
+            {"".join(html_rows)}
+        </div>
+    </div>
+</div>"""
+            st.markdown(table_html, unsafe_allow_html=True)
             st.caption(f"📈 Tổng cộng tìm thấy **{result.get('total_found', 0)}** trường/ngành phù hợp.")
             st.caption("📐 = Nhân hệ số · 📊 = Thang điểm · ⚠️ = Điều kiện · 📜 = Chứng chỉ · 📋 = Học bạ")
-            if st.session_state.get("sa_mode") == "exam":
-                st.info("💡 Với dòng thang 40 chưa rõ môn nhân, hệ thống hiển thị khoảng điểm và xếp hạng theo cận dưới.")
         else:
             st.info("Không tìm thấy trường phù hợp. Thử mở rộng phương thức xét tuyển hoặc kiểm tra lại điểm.")
 
@@ -1244,7 +1335,7 @@ def render_score_analysis_page():
 
         # --- Action buttons ---
         st.markdown("<br>", unsafe_allow_html=True)
-        col_a1, col_a2, col_a3 = st.columns(3)
+        col_a1, col_a2 = st.columns(2)
         with col_a1:
             if st.button("🔄 Phân tích lại", key="sa_retry", use_container_width=True):
                 st.session_state.sa_step = 1
@@ -1259,20 +1350,6 @@ def render_score_analysis_page():
                 st.session_state.pop("sa_ai_analysis_text", None)
                 st.rerun()
         with col_a2:
-            if st.button("💬 Hỏi thêm AI", key="sa_to_chat", use_container_width=True, type="primary"):
-                # Inject context vào chat
-                if df is not None and not df.empty:
-                    context_msg = (
-                        "[Kết quả phân tích xét tuyển]\n"
-                        f"Điểm: {scores}\n"
-                        f"Top trường:\n{_format_school_context_for_chat(df)}"
-                    )
-                    if "messages" not in st.session_state:
-                        st.session_state.messages = []
-                    st.session_state.messages.append({"role": "assistant", "content": context_msg})
-                st.session_state.page = "chat"
-                st.rerun()
-        with col_a3:
             if st.button("🏠 Trang chủ", key="sa_home", use_container_width=True):
                 st.session_state.page = "home"
                 st.session_state.sa_step = 1
