@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Transcript Editor</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "Segoe UI", Roboto, sans-serif;
+        background-color: transparent;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        text-align: center;
+      }
+      th {
+        background-color: #bce8f1;
+        border: 1px solid #ddd;
+        padding: 8px 4px;
+        color: #31708f;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      td {
+        border: 1px solid #ddd;
+        padding: 0;
+      }
+      td.subject-name {
+        background-color: #f9f9f9;
+        font-weight: 600;
+        padding: 8px 4px;
+        color: #333;
+        min-width: 60px;
+      }
+      input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+        border: none;
+        text-align: center;
+        padding: 10px 0;
+        font-size: 14px;
+        color: #333;
+        background: transparent;
+      }
+      input[type="number"]:focus {
+        outline: 2px solid #31708f;
+        background-color: #e8f4f8;
+      }
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+      }
+      /* Dark mode support */
+      body.dark-mode table th {
+        background-color: #1e3a5f;
+        color: #8bb4e7;
+        border-color: #444;
+      }
+      body.dark-mode table td {
+        border-color: #444;
+      }
+      body.dark-mode td.subject-name {
+        background-color: #262730;
+        color: #fafafa;
+      }
+      body.dark-mode input[type="number"] {
+        color: #fafafa;
+      }
+      body.dark-mode input[type="number"]:focus {
+        outline-color: #8bb4e7;
+        background-color: #2a3b5c;
+      }
+      /* Extra small screens (iPhone SE) */
+      @media (max-width: 400px) {
+        th { font-size: 11px; padding: 4px 1px; }
+        td.subject-name { font-size: 12px; min-width: 45px; padding: 6px 2px; }
+        input[type="number"] { font-size: 13px; padding: 6px 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <table id="transcriptTable">
+        <thead>
+          <tr>
+            <th>Môn học</th>
+            <th>HK1<br>Lớp 10</th>
+            <th>HK2<br>Lớp 10</th>
+            <th>HK1<br>Lớp 11</th>
+            <th>HK2<br>Lớp 11</th>
+            <th>HK1<br>Lớp 12</th>
+            <th>HK2<br>Lớp 12</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <!-- Rows will be injected by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+      const Streamlit = {
+        setComponentReady: function() {
+          window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:componentReady",
+            apiVersion: 1,
+          }, "*");
+        },
+        setFrameHeight: function(height) {
+          window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:setFrameHeight",
+            height: height !== undefined ? height : document.body.scrollHeight,
+          }, "*");
+        },
+        setComponentValue: function(value) {
+          window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:setComponentValue",
+            value: value,
+          }, "*");
+        }
+      };
+
+      let subjects = [];
+      let currentData = {};
+      let debounceTimer = null;
+
+      function renderTable() {
+        const tbody = document.getElementById("tbody");
+        tbody.innerHTML = "";
+        
+        const semesters = ["HK1 Lớp 10", "HK2 Lớp 10", "HK1 Lớp 11", "HK2 Lớp 11", "HK1 Lớp 12", "HK2 Lớp 12"];
+        
+        subjects.forEach(subj => {
+          const tr = document.createElement("tr");
+          
+          const tdSubj = document.createElement("td");
+          tdSubj.className = "subject-name";
+          tdSubj.textContent = subj;
+          tr.appendChild(tdSubj);
+          
+          semesters.forEach(sem => {
+            const td = document.createElement("td");
+            const input = document.createElement("input");
+            input.type = "number";
+            input.min = "0";
+            input.max = "10";
+            input.step = "0.1";
+            
+            if (currentData[subj] !== undefined && currentData[subj][sem] !== undefined) {
+               input.value = currentData[subj][sem];
+            } else {
+               input.value = "0.0";
+            }
+            
+            input.addEventListener("input", (e) => {
+               let rawVal = e.target.value;
+               let val = parseFloat(rawVal);
+               if (isNaN(val)) val = 0.0;
+               if (val > 10) { val = 10; e.target.value = "10.0"; }
+               if (val < 0) { val = 0; e.target.value = "0.0"; }
+               
+               if (!currentData[subj]) currentData[subj] = {};
+               currentData[subj][sem] = val;
+               
+               clearTimeout(debounceTimer);
+               debounceTimer = setTimeout(() => {
+                 Streamlit.setComponentValue(currentData);
+               }, 400);
+            });
+            
+            td.appendChild(input);
+            tr.appendChild(td);
+          });
+          
+          tbody.appendChild(tr);
+        });
+        
+        setTimeout(() => Streamlit.setFrameHeight(300), 10);
+        setTimeout(() => {
+            const table = document.getElementById("transcriptTable");
+            const h = table ? table.offsetHeight : document.body.scrollHeight;
+            Streamlit.setFrameHeight(h + 20);
+        }, 300);
+      }
+
+      function onRender(event) {
+        const args = event.data.args;
+        if (args.subjects && args.subjects.length > 0 && subjects.length === 0) {
+          subjects = args.subjects;
+          if (args.initial_data) {
+             currentData = args.initial_data;
+          }
+          renderTable();
+        }
+        
+        const theme = event.data.theme;
+        if (theme && theme.base === "dark") {
+          document.body.classList.add("dark-mode");
+        } else {
+          document.body.classList.remove("dark-mode");
+        }
+      }
+
+      window.addEventListener("message", function(event) {
+        if (event.data.type === "streamlit:render") {
+          onRender(event);
+        }
+      });
+
+      Streamlit.setComponentReady();
+    </script>
+  </body>
+</html>

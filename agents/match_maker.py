@@ -166,7 +166,10 @@ def _find_top_k_schools_legacy(
 
     # --- Lọc theo Ngành (Major) ---
     if major:
-        df_filtered = df_filtered[df_filtered["Tên ngành"].str.contains(major, case=False, na=False)].copy()
+        from utils.method_normalizer import normalize_method
+        major_norm = normalize_method(major)
+        mask_major = df_filtered["Tên ngành"].apply(lambda x: major_norm in normalize_method(x))
+        df_filtered = df_filtered[mask_major].copy()
         
     # --- Lọc theo Tỉnh/Thành phố ---
     if province:
