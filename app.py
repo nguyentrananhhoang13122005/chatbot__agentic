@@ -63,7 +63,12 @@ if st.session_state.get("auth_toast"):
 
 
 from ui.styles import load_custom_css
-from ui.components import render_sidebar, render_home_page, render_chat_page, render_score_analysis_page, render_profile_page, login_dialog
+from ui.pages.sidebar import render_sidebar
+from ui.pages.home import render_home_page
+from ui.pages.chat import render_chat_page
+from ui.pages.score_analysis import render_score_analysis_page
+from ui.pages.profile import render_profile_page
+from ui.pages.auth import login_dialog
 load_custom_css()
 api_key_valid, api_key_error = _cached_validate_api_key_v2()
 if not api_key_valid:
