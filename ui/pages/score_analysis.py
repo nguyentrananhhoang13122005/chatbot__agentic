@@ -20,6 +20,18 @@ from ui.pages.utils import _safe_js_string, _positive_session_float, _to_float
 from ui.pages.auth import login_dialog
 
 
+_SCORE_INPUT_PLACEHOLDER = "Nhập điểm"
+_EXTRA_APTITUDE_DETAIL_INPUTS = [
+    "Vẽ HHMT",
+    "Vẽ TTM",
+    "Năng khiếu SKĐA 1",
+    "Năng khiếu SKĐA 2",
+    "Năng khiếu TDTT 1",
+    "Năng khiếu TDTT 2",
+]
+_EXAM_MODE_LABEL = "📝 Xét điểm thi THPT"
+_TRANSCRIPT_MODE_LABEL = "📋 Xét điểm Học bạ THPT"
+
 def _score_widget_key(subject: str) -> str:
     return subject.replace(" ", "_").replace("/", "_")
 
