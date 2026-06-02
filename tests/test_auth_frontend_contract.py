@@ -4,7 +4,7 @@ import os
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_PATH = os.path.join(ROOT_DIR, "app.py")
-COMPONENTS_PATH = os.path.join(ROOT_DIR, "ui", "components.py")
+PAGES_DIR = os.path.join(ROOT_DIR, "ui", "pages")
 
 
 def _module_source(path):
@@ -13,7 +13,11 @@ def _module_source(path):
 
 
 def _source():
-    return "\n".join([_module_source(APP_PATH), _module_source(COMPONENTS_PATH)])
+    sources = [_module_source(APP_PATH)]
+    for fname in os.listdir(PAGES_DIR):
+        if fname.endswith(".py"):
+            sources.append(_module_source(os.path.join(PAGES_DIR, fname)))
+    return "\n".join(sources)
 
 
 def _tree():
