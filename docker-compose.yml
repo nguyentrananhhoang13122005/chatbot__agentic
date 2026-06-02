@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  unisearch-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: unisearch_ai
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      # Mount thư mục model của EasyOCR ra ngoài để tránh tải lại model mỗi lần container khởi động lại
+      - easyocr_models:/root/.EasyOCR
+    env_file:
+      - .env
+    restart: unless-stopped
+    # Giới hạn RAM nếu deploy trên VPS nhỏ để tránh crash do OOM (Out Of Memory)
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+
+volumes:
+  easyocr_models:
