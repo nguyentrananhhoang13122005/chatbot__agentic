@@ -1,37 +1,39 @@
-# 🎓 UniSearch AI — Chatbot Tư Vấn Tuyển Sinh Đại Học
+# 🎓 UniSearch AI — Hệ thống AI Phân tích Xét điểm & Gợi ý Tuyển sinh Đại học
 
 [![Tests](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml/badge.svg)](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 
-Hệ thống AI Chatbot thông minh hỗ trợ tra cứu điểm chuẩn, thông tin tuyển sinh và tư vấn hướng nghiệp cho sinh viên Việt Nam.
+Hệ thống AI thông minh hỗ trợ phân tích điểm thi, tính toán tổ hợp, đọc hiểu học bạ bằng OCR và tư vấn trường đại học phù hợp cho thí sinh Việt Nam. Hệ thống tập trung tối đa vào độ chính xác của dữ liệu và ứng dụng trí tuệ nhân tạo để đưa ra các gợi ý an toàn/thử thách cho học sinh.
 
 ## ✨ Tính năng chính
 
-- **Tra cứu điểm chuẩn:** Hỏi bằng ngôn ngữ tự nhiên, hỗ trợ viết tắt (HUST, PTIT, NEU...).
-- **Hybrid Search Engine:** Kết hợp BM25 + Fuzzy Matching + Token Overlap để tìm trường chính xác tuyệt đối.
-- **Unified Analyzer:** Gộp phân loại ý định + trích xuất thực thể + chuẩn hóa query vào 1 lần gọi AI duy nhất.
-- **Streaming Response:** Phản hồi từ Recommender/Counselor được hiển thị theo thời gian thực bằng `st.write_stream()`.
-- **Tư vấn hướng nghiệp:** Upload CV để nhận đánh giá và gợi ý ngành học phù hợp.
-- **Gold Test Suite:** Bộ kiểm thử tự động 18 test cases để đảm bảo chất lượng.
+- **Tính toán tổ hợp & Điểm ưu tiên:** Tự động tính điểm tổ hợp mạnh nhất, bao gồm cả điểm cộng khu vực, đối tượng theo quy chế tuyển sinh mới nhất (2026) của Bộ GD&ĐT.
+- **Phân tích Học bạ bằng AI (OCR):** Tải file PDF hoặc ảnh học bạ lên, AI sẽ sử dụng EasyOCR + LLM để tự động nhận diện điểm số các môn và chuyển thành bảng dữ liệu cấu trúc.
+- **Hybrid Search Engine:** Kết hợp thuật toán BM25, Fuzzy Matching và Token Overlap giúp tra cứu và đối chiếu trường chính xác tuyệt đối mà không gặp tình trạng ảo giác (zero-hallucination).
+- **Match Maker & Admission Evaluator:** Đánh giá độ chênh lệch giữa điểm của thí sinh và điểm chuẩn các năm trước, từ đó phân loại cơ hội trúng tuyển thành các nhóm (Safe, Target, Reach).
+- **Streaming Response:** Trải nghiệm phản hồi phân tích điểm thời gian thực mượt mà với `st.write_stream()`.
+- **Gold Test Suite:** Bộ kiểm thử tự động với hàng loạt test cases để đảm bảo tính chính xác của các công thức tính toán.
 
 ## 🏗️ Kiến trúc hệ thống
 
 ```
 chatbot__agentic/
-├── app.py                  # Giao diện Streamlit (UI chính)
-├── router.py               # Unified Analyzer (Routing + Entity Extraction)
-├── llm_client.py           # OpenRouter client, fallback model chain, streaming LLM helper
+├── app.py                  # Giao diện chính Streamlit
+├── core/
+│   ├── score_calculator.py # Logic tính điểm, cộng điểm ưu tiên theo quy chế 2026
+│   └── query_processor.py  # Xử lý các logic AI và truy vấn dữ liệu
 ├── agents/
-│   ├── recommender.py      # Agent tra cứu điểm chuẩn (Hybrid Matcher + Pandas Engine)
-│   └── counselor.py        # Agent tư vấn hướng nghiệp (CV Analysis)
+│   ├── recommender.py      # Module tra cứu điểm chuẩn (Hybrid Matcher + SQLite)
+│   ├── counselor.py        # Module OCR và Parser trích xuất điểm học bạ
+│   └── match_maker.py      # Đánh giá cơ hội trúng tuyển dựa trên độ chênh lệch điểm
 ├── tests/
 │   ├── gold_queries.py     # Bộ test cases chuẩn (Gold Test Set)
 │   └── run_gold_tests.py   # Test Runner tự động
-├── data/                   # ⚠️ THƯ MỤC NÀY KHÔNG ĐƯỢC PUSH LÊN GITHUB (xem bên dưới)
-├── clean_data.py           # Script làm sạch dữ liệu OCR
-├── etl_pipeline.py         # Pipeline trích xuất dữ liệu từ PDF
-├── ocr_extractor.py        # OCR Engine (EasyOCR + PyMuPDF)
+├── data/                   # ⚠️ THƯ MỤC CƠ SỞ DỮ LIỆU (Chứa SQLite và CSV)
+├── etl_pipeline.py         # Pipeline trích xuất dữ liệu từ PDF Đề án tuyển sinh
 ├── requirements.txt        # Danh sách thư viện cần cài
+├── docker-compose.yml      # Cấu hình deploy bằng Docker
+├── Dockerfile              # Docker image build file được tối ưu hóa cho môi trường Production
 ├── .env.example            # Template cấu hình API Key
 └── .gitignore              # Danh sách file bị chặn không push lên GitHub
 ```
@@ -57,14 +59,9 @@ python -m venv .venv
 # Trên Windows (PowerShell):
 .venv\Scripts\Activate.ps1
 
-# Trên Windows (CMD):
-.venv\Scripts\activate.bat
-
 # Trên macOS/Linux:
 source .venv/bin/activate
 ```
-
-> **Lưu ý:** Sau khi kích hoạt thành công, bạn sẽ thấy `(.venv)` xuất hiện ở đầu dòng lệnh.
 
 ### Bước 3: Cài đặt thư viện
 
@@ -89,53 +86,39 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxx
 
 ### Bước 5: Chuẩn bị Dữ liệu
 
-> ⚠️ **QUAN TRỌNG:** Dữ liệu tuyển sinh KHÔNG được đẩy lên GitHub do yêu cầu bảo mật. Bạn cần liên hệ trưởng nhóm để nhận các file sau và đặt vào thư mục `data/`:
-
-```
-data/
-├── data_tuyensinh_clean.csv        # Database tuyển sinh chính (đã làm sạch)
-├── data_diem_chuan_verified.csv    # Database điểm chuẩn đã xác thực
-├── data_tuyensinh_2026.csv         # Đề án tuyển sinh 2026 đã xử lý
-├── DATS_2024/                      # Thư mục PDF gốc năm 2024
-└── DATS_2025/                      # Thư mục PDF gốc năm 2025
-```
+> ⚠️ **QUAN TRỌNG:** Cơ sở dữ liệu tuyển sinh KHÔNG được đẩy lên GitHub do yêu cầu bảo mật và dung lượng. Bạn cần liên hệ trưởng nhóm để nhận các file DB và CSV rồi đặt vào thư mục `data/`.
 
 ### Bước 6: Chạy ứng dụng
 
 ```bash
 python -m streamlit run app.py
 ```
-
 Truy cập trình duyệt tại: `http://localhost:8501`
 
 ---
 
 ## 🧪 Chạy kiểm thử (Testing)
 
+Dự án sử dụng `pytest` để đảm bảo logic tính toán điểm chuẩn, cộng điểm ưu tiên luôn đạt độ chính xác 100%.
+
 ```bash
-# Unit Tests — Chạy offline, KHÔNG cần API key (45 test cases)
-python -m pytest tests/test_matcher.py -v
+# Unit Tests — Chạy offline (KHÔNG cần API key)
+python -m pytest tests/ -v
 
 # Unit Tests với Coverage Report
-python -m pytest tests/test_matcher.py --cov=agents --cov-report=term-missing -v
-
-# Gold Tests — CẦN API key + data CSV (18 test cases)
-python tests/run_gold_tests.py
-
-# Chạy 1 Gold test case cụ thể
-python tests/run_gold_tests.py --id S08
+python -m pytest tests/ --cov=core --cov=utils --cov-report=term-missing -v
 ```
 
-> **Lưu ý:** CI/CD (GitHub Actions) chỉ chạy **Unit Tests** tự động. Gold Tests cần chạy thủ công vì yêu cầu API key và dữ liệu.
+> **Lưu ý:** CI/CD (GitHub Actions) sẽ tự động chạy bộ **Unit Tests** mỗi khi có commit mới đẩy lên nhánh `main`.
 
 ---
 
 ## 📝 Quy tắc làm việc nhóm
 
-1. **KHÔNG BAO GIỜ** commit file `.env` hoặc file CSV/PDF dữ liệu lên GitHub.
+1. **KHÔNG BAO GIỜ** commit file `.env`, file SQLite `.db` hoặc file CSV dữ liệu lên GitHub.
 2. Tạo nhánh riêng (`git checkout -b ten_tinh_nang`) khi phát triển tính năng mới.
-3. Tạo Pull Request để review code trước khi merge vào `main`.
-4. Chạy `python tests/run_gold_tests.py` sau mỗi lần thay đổi code để đảm bảo không gây lỗi.
+3. Chạy `pytest` sau mỗi lần thay đổi code phần tính điểm để đảm bảo không làm hỏng logic của hệ thống.
+4. Ưu tiên sử dụng `sqlite3` thay vì load toàn bộ CSV vào pandas để chống sập RAM (Out of Memory) trên server.
 
 ---
 
@@ -143,10 +126,11 @@ python tests/run_gold_tests.py --id S08
 
 | Thành phần | Công nghệ |
 |---|---|
-| LLM | OpenRouter API (`qwen/qwen3-8b` + fallback models) |
-| UI | Streamlit |
-| Data Engine | Pandas |
-| Search | BM25 + Fuzzy Matching (thuần Python) |
-| OCR | EasyOCR + PyMuPDF |
-| Streaming | OpenAI-compatible `stream=True` + `st.write_stream()` |
-| Testing | Pytest Unit Tests + Gold Test Set (Custom) |
+| AI / LLM | OpenRouter API (`qwen/qwen3-8b` + fallback models) |
+| UI Framework | Streamlit |
+| Cơ sở dữ liệu | SQLite (Truy vấn tốc độ cao O(log N)) |
+| Data Processing | Pandas, Numpy |
+| Search Engine | BM25 + Fuzzy Matching (thuần Python) |
+| Phân tích Học bạ | EasyOCR + OpenCV + PyMuPDF |
+| Infrastructure | Docker, Docker Compose |
+| Testing | Pytest |
