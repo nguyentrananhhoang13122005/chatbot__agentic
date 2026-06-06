@@ -15,7 +15,10 @@ env/
 .env
 
 # Data & Logs (Let volumes handle this)
+data/**/*.db
+data/*.db
 data/chat_history.db
+data/backups/
 logs/
 scratch/
 
