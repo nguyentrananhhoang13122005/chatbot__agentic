@@ -551,7 +551,7 @@ def render_score_analysis_page():
 
             _component_func = components.declare_component(
                 "transcript_editor",
-                path=os.path.join(os.path.dirname(__file__), "transcript_editor")
+                path=os.path.join(os.path.dirname(os.path.dirname(__file__)), "transcript_editor")
             )
 
             component_value = _component_func(

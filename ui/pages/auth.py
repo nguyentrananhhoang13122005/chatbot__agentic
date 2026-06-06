@@ -15,9 +15,7 @@ from core.query_processor import _process_query
 from utils.audio_utils import generate_audio_from_text
 from streamlit_mic_recorder import speech_to_text
 
-# Local imports after split
-from ui.pages.utils import _safe_js_string, _positive_session_float, _to_float
-from ui.pages.auth import login_dialog
+
 
 
 @st.dialog("Đăng nhập hoặc đăng ký", width="small")
