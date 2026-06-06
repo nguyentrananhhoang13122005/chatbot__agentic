@@ -62,18 +62,18 @@ def render_sidebar():
             """, height=0, scrolling=False)
             st.rerun()
 
-        if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
-            # Lưu phiên hiện tại trước khi tạo mới
-            if user and st.session_state.messages:
-                save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
-            st.session_state.session_id = new_session_id()
-            st.session_state.messages = []
-            st.session_state.page = "chat"
-            st.rerun()
-
-        if st.button("💬 Trò chuyện hiện tại", use_container_width=True, type="secondary"):
-            st.session_state.page = "chat"
-            st.rerun()
+        # if st.button("＋ Phiên tư vấn mới", use_container_width=True, type="primary"):
+        #     # Lưu phiên hiện tại trước khi tạo mới
+        #     if user and st.session_state.messages:
+        #         save_session(st.session_state.session_id, st.session_state.messages, user_id=user["id"])
+        #     st.session_state.session_id = new_session_id()
+        #     st.session_state.messages = []
+        #     st.session_state.page = "chat"
+        #     st.rerun()
+        #
+        # if st.button("💬 Trò chuyện hiện tại", use_container_width=True, type="secondary"):
+        #     st.session_state.page = "chat"
+        #     st.rerun()
 
         # ─── LỊCH SỬ GẦN ĐÂY (từ SQLite) ───
         if user:
