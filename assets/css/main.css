@@ -172,7 +172,10 @@
         font-family: var(--font-sans)!important;
         color: var(--text)!important;
     }
-    html,body,p,span,div,li,a,input,textarea,button,label {
+    html,body,p,div,li,a,input,textarea,button,label {
+        font-family: var(--font-sans)!important;
+    }
+    span:not(.material-symbols-rounded):not([data-testid="stIconMaterial"]) {
         font-family: var(--font-sans)!important;
     }
 

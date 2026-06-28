@@ -21,13 +21,13 @@ from ui.pages.auth import login_dialog
 
 
 def render_chat_page():
-    if st.button("🏠 Quay lại Trang chủ", type="secondary"):
+    if st.button("Quay lại Trang chủ", icon=":material/home:", type="secondary"):
         st.session_state.page = "home"
         st.rerun()
 
     st.markdown('<div class="chat-hdr"><span class="chat-dot"></span> Tuyển sinh AI</div>', unsafe_allow_html=True)
 
-    uploaded_cv_widget = st.file_uploader("📥 Tải lên Học bạ / Hồ sơ (Ảnh hoặc PDF):", type=["jpg", "jpeg", "png", "pdf"])
+    uploaded_cv_widget = st.file_uploader("📤 Tải lên Học bạ / Hồ sơ (Ảnh hoặc PDF):", type=["jpg", "jpeg", "png", "pdf"])
 
     # === CACHE FILE VÀO SESSION_STATE ===
     # BUG FIX: Streamlit giữ widget qua re-render → uploaded_cv_widget.read() lần 2
@@ -42,10 +42,10 @@ def render_chat_page():
                 st.session_state['cached_cv_bytes']       = raw_bytes
                 st.session_state['cached_cv_name']        = uploaded_cv_widget.name
                 st.session_state['cached_cv_fingerprint'] = file_fingerprint
-                st.success(f"✅ Đã tải lên: **{uploaded_cv_widget.name}** — Sẵn sàng phân tích!")
+                st.success(f"Đã tải lên: **{uploaded_cv_widget.name}** — Sẵn sàng phân tích!")
         else:
             # Cùng file, đã cache → chỉ hiển thị thông báo
-            st.success(f"✅ Học bạ đang hoạt động: **{uploaded_cv_widget.name}**")
+            st.success(f"Học bạ đang hoạt động: **{uploaded_cv_widget.name}**")
 
     # Tái tạo file object từ cache để dùng cho OCR (fresh BytesIO mỗi lần render)
     uploaded_cv = None
@@ -56,8 +56,8 @@ def render_chat_page():
         uploaded_cv.name = cv_name  # Gắn tên để doc_file() nhận diện đúng định dạng (.jpg/.pdf)
         if uploaded_cv_widget is None:
             col_info, col_clear = st.columns([4, 1])
-            col_info.info(f"📎 Đang dùng học bạ đã tải: **{cv_name}**")
-            if col_clear.button("🗑️ Xóa file", key="clear_cv", type="secondary"):
+            col_info.info(f"Đang dùng học bạ đã tải: **{cv_name}**")
+            if col_clear.button("Xóa file", icon=":material/delete_forever:", key="clear_cv", type="secondary"):
                 for k in ['cached_cv_bytes', 'cached_cv_name', 'cached_cv_fingerprint']:
                     st.session_state.pop(k, None)
                 st.rerun()
@@ -86,7 +86,7 @@ def render_chat_page():
         with st.chat_message(msg["role"], avatar="assistant" if msg["role"] == "assistant" else "user"):
             st.write(msg["content"])
             if msg["role"] == "assistant":
-                if st.button("🔊 Nghe", key=f"tts_{i}"):
+                if st.button("Nghe", icon=":material/volume_up:", key=f"tts_{i}"):
                     with st.spinner("Đang tạo giọng nói..."):
                         audio_bytes = generate_audio_from_text(msg["content"])
                         if audio_bytes:
