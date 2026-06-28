@@ -187,7 +187,7 @@ def render_profile_page():
             st.session_state.pop("confirm_clear_all_unis", None)
             st.rerun()
     else:
-        if st.button("Xóa toàn bộ lịch sử tra cứu", icon=":material/delete_sweep:", key="clear_all_unis", use_container_width=True, type="secondary"):
+        if st.button("Xóa toàn bộ lịch sử tra cứu", icon="🧹", key="clear_all_unis", use_container_width=True, type="secondary"):
             st.session_state.confirm_clear_all_unis = True
             st.rerun()
 

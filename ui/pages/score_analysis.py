@@ -505,7 +505,7 @@ def render_score_analysis_page():
             from utils.score_calculator import EXTRA_LANGUAGES
             with st.expander(
                 "Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga)",
-                icon=":material/language:",
+                icon="🌐",
                 expanded=missing_targets["language"],
             ):
                 st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
@@ -525,7 +525,7 @@ def render_score_analysis_page():
             from utils.score_calculator import EXTRA_APTITUDE
             with st.expander(
                 "Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...)",
-                icon=":material/palette:",
+                icon="🎨",
                 expanded=missing_targets["aptitude"],
             ):
                 st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
@@ -627,7 +627,7 @@ def render_score_analysis_page():
             invalid_score_inputs = []
             not_taken_subjects = set()
 
-        with st.expander("Chứng chỉ ngoại ngữ (nếu có)", icon=":material/badge:", expanded=missing_targets["certificate"]):
+        with st.expander("Chứng chỉ ngoại ngữ (nếu có)", icon="🎫", expanded=missing_targets["certificate"]):
             st.caption("Nhập nếu ngành yêu cầu chứng chỉ IELTS/TOEFL/TOEIC.")
             cert_col1, cert_col2, cert_col3 = st.columns(3)
             with cert_col1:
@@ -637,7 +637,7 @@ def render_score_analysis_page():
             with cert_col3:
                 st.number_input("TOEIC", 0, 990, 0, key="sa_toeic")
 
-        with st.expander("Thông tin THPT bổ sung (nếu ngành yêu cầu)", icon=":material/assignment_ind:", expanded=missing_targets["school_record"]):
+        with st.expander("Thông tin THPT bổ sung (nếu ngành yêu cầu)", icon="📝", expanded=missing_targets["school_record"]):
             st.caption("Một số ngành yêu cầu ĐTB lớp 12 hoặc học lực.")
             gpa_col1, gpa_col2 = st.columns(2)
             with gpa_col1:
@@ -767,7 +767,7 @@ def render_score_analysis_page():
             key="sa_top_k",
         )
 
-        with st.expander("Bộ lọc nâng cao (Tùy chọn)", icon=":material/tune:", expanded=False):
+        with st.expander("Bộ lọc nâng cao (Tùy chọn)", icon="⚙️", expanded=False):
             st.markdown("Thu hẹp kết quả tìm kiếm theo sở thích của bạn.")
             prov_options = ["Tất cả"] + list_provinces()
             filter_province = st.selectbox("Chọn Tỉnh/Thành phố:", prov_options, key="sa_filter_province")

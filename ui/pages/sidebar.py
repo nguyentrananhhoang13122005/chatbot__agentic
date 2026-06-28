@@ -39,7 +39,7 @@ def render_sidebar():
                 login_dialog()
 
         current_theme = st.session_state.get("theme", "light")
-        toggle_icon = ":material/dark_mode:" if current_theme == "light" else ":material/light_mode:"
+        toggle_icon = "🌙" if current_theme == "light" else "☀️"
         toggle_label = "Chế độ tối" if current_theme == "light" else "Chế độ sáng"
         if st.button(toggle_label, icon=toggle_icon, key="theme_toggle", use_container_width=True, type="secondary"):
             new_theme = "dark" if current_theme == "light" else "light"
@@ -169,7 +169,7 @@ def render_sidebar():
         st.markdown('<div class="sb-section">Hệ thống</div>', unsafe_allow_html=True)
         st.caption("💡 Phiên chưa ghim sẽ tự động xóa sau 20 ngày")
         if user:
-            if st.button("Xoá lịch sử của tôi", icon=":material/delete_sweep:", use_container_width=True, type="secondary"):
+            if st.button("Xoá lịch sử của tôi", icon="🧹", use_container_width=True, type="secondary"):
                 for sess in list_sessions(limit=1000, user_id=user["id"]):
                     delete_session(sess["id"], user_id=user["id"])
                 st.session_state.session_id = new_session_id()
