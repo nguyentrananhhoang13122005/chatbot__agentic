@@ -345,3 +345,107 @@ class TestAuthEdgeCases:
     def test_verify_password_invalid_hash(self, auth_modules):
         _, auth, _ = auth_modules
         assert auth.verify_password("plain", "invalid-hash-format") is False
+
+
+class TestAuthSettings:
+    def test_change_password_success(self, auth_modules):
+        auth_db, auth, _ = auth_modules
+        user_raw = auth_db.create_user(
+            email="changepass@example.com",
+            display_name="Change Pass",
+            avatar_url="",
+            auth_provider="email",
+            password_hash=auth.hash_password("oldpassword123"),
+        )
+
+        success, error = auth.change_password(user_raw["id"], "oldpassword123", "newpassword123")
+        assert success is True
+        assert error is None
+
+        # Verify login with new password works
+        logged_in_user, login_err = auth.login_user("changepass@example.com", "newpassword123")
+        assert login_err is None
+        assert logged_in_user is not None
+
+    def test_change_password_invalid_current(self, auth_modules):
+        auth_db, auth, _ = auth_modules
+        user_raw = auth_db.create_user(
+            email="changepass2@example.com",
+            display_name="Change Pass 2",
+            avatar_url="",
+            auth_provider="email",
+            password_hash=auth.hash_password("oldpassword123"),
+        )
+
+        success, error = auth.change_password(user_raw["id"], "wrongpassword", "newpassword123")
+        assert success is False
+        assert error == "Mật khẩu hiện tại không đúng."
+
+    def test_change_password_too_short(self, auth_modules):
+        auth_db, auth, _ = auth_modules
+        user_raw = auth_db.create_user(
+            email="changepass3@example.com",
+            display_name="Change Pass 3",
+            avatar_url="",
+            auth_provider="email",
+            password_hash=auth.hash_password("oldpassword123"),
+        )
+
+        success, error = auth.change_password(user_raw["id"], "oldpassword123", "short")
+        assert success is False
+        assert error == "Mật khẩu mới phải có ít nhất 8 ký tự."
+
+    def test_delete_user_account(self, auth_modules):
+        auth_db, _, chat_db = auth_modules
+        user_raw = auth_db.create_user(
+            email="delete@example.com",
+            display_name="Delete Me",
+            avatar_url="",
+            auth_provider="email",
+            password_hash="hashed",
+        )
+
+        # Save a chat session and searched university
+        chat_db.save_session("session1", [{"role": "user", "content": "Hi"}], user_id=user_raw["id"])
+        chat_db.save_searched_university(user_raw["id"], "Đại học Bách Khoa")
+
+        # Assert they exist
+        assert len(chat_db.list_sessions(user_id=user_raw["id"])) == 1
+        assert len(chat_db.list_searched_universities(user_id=user_raw["id"])) == 1
+
+        # Delete account
+        auth_db.delete_user_account(user_raw["id"])
+
+        # Verify deleted cascade
+        assert auth_db.get_user_by_id(user_raw["id"]) is None
+        assert len(chat_db.list_sessions(user_id=user_raw["id"])) == 0
+        assert len(chat_db.list_searched_universities(user_id=user_raw["id"])) == 0
+
+    def test_export_and_clear_data(self, auth_modules):
+        auth_db, _, chat_db = auth_modules
+        user_raw = auth_db.create_user(
+            email="export@example.com",
+            display_name="Export Me",
+            avatar_url="",
+            auth_provider="email",
+            password_hash="hashed",
+        )
+
+        chat_db.save_session("session2", [{"role": "user", "content": "Hello"}], user_id=user_raw["id"])
+        chat_db.save_searched_university(user_raw["id"], "Đại học Công nghệ")
+
+        # Export
+        chat_csv, uni_csv = chat_db.export_user_data_csv(user_raw["id"])
+        assert "Mã phiên chat" in chat_csv
+        assert "Hello" in chat_csv
+        assert "Tên trường ĐH" in uni_csv
+        assert "Đại học Công nghệ" in uni_csv
+
+        # Clear chat sessions
+        chat_db.clear_user_chat_sessions(user_raw["id"])
+        assert len(chat_db.list_sessions(user_id=user_raw["id"])) == 0
+
+        # Clear searched universities
+        chat_db.clear_searched_universities(user_raw["id"])
+        assert len(chat_db.list_searched_universities(user_id=user_raw["id"])) == 0
+

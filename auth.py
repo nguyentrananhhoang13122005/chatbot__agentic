@@ -201,3 +201,21 @@ def logout():
     import streamlit as st
 
     st.session_state.pop("user", None)
+
+
+def change_password(user_id: str, current_password: str, new_password: str) -> tuple[bool, str | None]:
+    from auth_db import get_user_by_id, update_password
+    user = get_user_by_id(user_id)
+    if not user:
+        return False, "Không tìm thấy người dùng."
+    if user.get("auth_provider") != "email":
+        return False, "Tài khoản đăng nhập bằng Google không thể đổi mật khẩu tại đây."
+    if not verify_password(current_password, user.get("password_hash", "")):
+        return False, "Mật khẩu hiện tại không đúng."
+    if len(new_password) < 8:
+        return False, "Mật khẩu mới phải có ít nhất 8 ký tự."
+
+    hashed = hash_password(new_password)
+    update_password(user_id, hashed)
+    return True, None
+

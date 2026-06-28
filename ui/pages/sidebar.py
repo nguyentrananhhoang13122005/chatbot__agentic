@@ -192,7 +192,8 @@ def render_sidebar():
                     st.session_state.page = "profile"
                     st.rerun()
                 if st.button("Cài đặt", icon=":material/settings:", key="settings_btn", use_container_width=True):
-                    st.toast("🚧 Tính năng đang phát triển.")
+                    st.session_state.page = "settings"
+                    st.rerun()
                 if st.button("Đăng xuất", icon=":material/logout:", key="logout_popup_btn", use_container_width=True):
                     logout()
                     st.session_state.session_id = new_session_id()

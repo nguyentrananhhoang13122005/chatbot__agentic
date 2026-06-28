@@ -68,6 +68,7 @@ from ui.pages.home import render_home_page
 from ui.pages.chat import render_chat_page
 from ui.pages.score_analysis import render_score_analysis_page
 from ui.pages.profile import render_profile_page
+from ui.pages.settings import render_settings_page
 from ui.pages.auth import login_dialog
 load_custom_css()
 api_key_valid, api_key_error = _cached_validate_api_key_v2()
@@ -80,6 +81,8 @@ elif st.session_state.page == "score_analysis":
     render_score_analysis_page()
 elif st.session_state.page == "profile":
     render_profile_page()
+elif st.session_state.page == "settings":
+    render_settings_page()
 else:
     render_chat_page()
 if not st.session_state.get("user"):

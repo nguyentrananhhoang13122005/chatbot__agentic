@@ -178,6 +178,20 @@ def delete_session(session_id: str, user_id: str | None = None) -> bool:
     return cursor.rowcount > 0
 
 
+def clear_user_chat_sessions(user_id: str) -> int:
+    """Xóa toàn bộ lịch sử chat của user. Trả về số bản ghi đã xóa."""
+    conn = _get_conn()
+    cursor = conn.execute(
+        "DELETE FROM chat_sessions WHERE user_id = ?",
+        (user_id,),
+    )
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+
 def rename_session(session_id: str, new_title: str, user_id: str | None = None) -> bool:
     """Đổi tên một phiên chat."""
     conn = _get_conn()
@@ -344,3 +358,59 @@ def clear_searched_universities(user_id: str) -> int:
     conn.commit()
     conn.close()
     return deleted
+
+
+def export_user_data_csv(user_id: str) -> tuple[str, str]:
+    """Xuất lịch sử chat và lịch sử tra cứu trường thành 2 chuỗi CSV (đã ghi đè BOM UTF-8)."""
+    import csv
+    import io
+
+    # 1. Export Chat Sessions
+    conn = _get_conn()
+    rows_chat = conn.execute(
+        "SELECT id, title, messages, created_at, updated_at FROM chat_sessions WHERE user_id = ?",
+        (user_id,)
+    ).fetchall()
+
+    chat_io = io.StringIO()
+    # Ghi BOM cho Excel tương thích tiếng Việt
+    chat_io.write('\ufeff')
+    chat_writer = csv.writer(chat_io)
+    chat_writer.writerow(["Mã phiên chat", "Tiêu đề phiên", "Vai trò (User/AI)", "Nội dung tin nhắn", "Thời gian tạo", "Thời gian cập nhật"])
+
+    for row in rows_chat:
+        session_id = row["id"]
+        title = row["title"]
+        created_at = row["created_at"]
+        updated_at = row["updated_at"]
+        try:
+            messages = json.loads(row["messages"])
+        except Exception:
+            messages = []
+
+        for msg in messages:
+            role = "Người dùng" if msg.get("role") == "user" else "Trợ lý AI"
+            content = msg.get("content", "")
+            chat_writer.writerow([session_id, title, role, content, created_at, updated_at])
+
+    chat_csv = chat_io.getvalue()
+
+    # 2. Export Searched Universities
+    rows_uni = conn.execute(
+        "SELECT school_name, query_text, session_id, searched_at FROM searched_universities WHERE user_id = ? ORDER BY searched_at DESC",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    uni_io = io.StringIO()
+    uni_io.write('\ufeff')
+    uni_writer = csv.writer(uni_io)
+    uni_writer.writerow(["Tên trường ĐH", "Câu hỏi tra cứu", "Mã phiên chat liên quan", "Thời gian tra cứu"])
+
+    for row in rows_uni:
+        uni_writer.writerow([row["school_name"], row["query_text"], row["session_id"], row["searched_at"]])
+
+    uni_csv = uni_io.getvalue()
+
+    return chat_csv, uni_csv
+
