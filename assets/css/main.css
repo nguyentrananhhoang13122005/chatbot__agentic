@@ -2389,3 +2389,34 @@
             transform: none !important;
         }
     }
+
+    /* ============================================================
+       SETTINGS PAGE STYLES (Riso Design System)
+       ============================================================ */
+    .settings-danger-title {
+        border-bottom-color: var(--danger) !important;
+    }
+    .settings-danger-card {
+        background: var(--surface) !important;
+        border: 2px solid var(--danger) !important;
+        border-radius: var(--radius-md) !important;
+        padding: var(--sp-16) var(--sp-24) !important;
+        box-shadow: 4px 4px 0px var(--danger) !important;
+        color: var(--text) !important;
+        transition: all 0.2s ease !important;
+        margin-bottom: var(--sp-16) !important;
+    }
+    .settings-danger-card:hover {
+        transform: translate(-2px, -2px) !important;
+        box-shadow: 6px 6px 0px var(--danger) !important;
+    }
+
+    /* Dark Mode overrides for Settings */
+    html[data-theme="dark"] .settings-danger-card {
+        background: var(--surface-raised) !important;
+        border-color: var(--danger) !important;
+        box-shadow: 0 4px 20px rgba(220, 38, 38, 0.15), 0 0 0 1px var(--border) !important;
+    }
+    html[data-theme="dark"] .settings-danger-card:hover {
+        box-shadow: 0 6px 24px rgba(220, 38, 38, 0.25), 0 0 0 1px var(--danger) !important;
+    }

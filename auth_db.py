@@ -117,3 +117,24 @@ def upsert_google_user(email: str, display_name: str, avatar_url: str = "") -> d
         auth_provider="google",
         password_hash="",
     )
+
+
+def update_password(user_id: str, new_password_hash: str):
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_password_hash, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_user_account(user_id: str):
+    conn = _get_conn()
+    # Cascade delete messages and searched universities
+    conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
