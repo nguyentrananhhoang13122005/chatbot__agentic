@@ -533,16 +533,24 @@
         text-transform: uppercase !important;
         letter-spacing: 0.5px !important;
     }
-    div[data-testid="stDialog"] .stLinkButton a {
+    div[data-testid="stDialog"] .google-login-link {
+        display: block;
+        width: 100%;
+        padding: 0.6rem 1rem;
+        text-align: center;
+        text-decoration: none;
         background: var(--surface) !important;
         border: 2px solid var(--border) !important;
         border-radius: var(--radius-md) !important;
         color: var(--text) !important;
         font-weight: 700 !important;
+        font-size: 0.875rem;
         box-shadow: 2px 2px 0px var(--border) !important;
         transition: all 0.2s ease !important;
+        cursor: pointer;
+        box-sizing: border-box;
     }
-    div[data-testid="stDialog"] .stLinkButton a:hover {
+    div[data-testid="stDialog"] .google-login-link:hover {
         transform: translate(-2px, -2px) !important;
         box-shadow: 4px 4px 0px var(--secondary) !important;
     }
@@ -1361,14 +1369,14 @@
         border-color: var(--border, #2E2E33) !important;
     }
 
-    /* --- Link button (Google login) --- */
-    html[data-theme="dark"] div[data-testid="stDialog"] .stLinkButton a {
+    /* --- Google login link (styled as button) --- */
+    html[data-theme="dark"] div[data-testid="stDialog"] .google-login-link {
         background: var(--surface-raised, #222226) !important;
         color: var(--text, #EDEDF0) !important;
         border-color: var(--border, #2E2E33) !important;
         box-shadow: var(--riso-shadow) !important;
     }
-    html[data-theme="dark"] div[data-testid="stDialog"] .stLinkButton a:hover {
+    html[data-theme="dark"] div[data-testid="stDialog"] .google-login-link:hover {
         border-color: var(--primary) !important;
         box-shadow: var(--riso-shadow-hover) !important;
         color: var(--primary) !important;
