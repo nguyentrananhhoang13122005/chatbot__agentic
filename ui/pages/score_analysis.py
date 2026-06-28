@@ -19,6 +19,18 @@ from streamlit_mic_recorder import speech_to_text
 from ui.pages.utils import _safe_js_string, _positive_session_float, _to_float
 from ui.pages.auth import login_dialog
 
+def list_provinces() -> list[str]:
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "university_provinces.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return sorted(list(set(data.values())))
+    except Exception as e:
+        print(f"Error loading provinces: {e}")
+        return []
+
 
 _SCORE_INPUT_PLACEHOLDER = "Nhập điểm"
 _EXTRA_APTITUDE_DETAIL_INPUTS = [
@@ -30,7 +42,7 @@ _EXTRA_APTITUDE_DETAIL_INPUTS = [
     "Năng khiếu TDTT 2",
 ]
 _EXAM_MODE_LABEL = "📝 Xét điểm thi THPT"
-_TRANSCRIPT_MODE_LABEL = "📋 Xét điểm Học bạ THPT"
+_TRANSCRIPT_MODE_LABEL = "📖 Xét điểm Học bạ THPT"
 
 def _score_widget_key(subject: str) -> str:
     return subject.replace(" ", "_").replace("/", "_")
@@ -229,7 +241,7 @@ def _format_annotation(row) -> str:
     scale_flag = str(row.get("Thang_40", "")).strip().lower()
     is_thang_40 = bool(row.get("Thang_40")) and scale_flag not in {"false", "0", "nan", "none"}
     if is_thang_40 and min_score is not None and max_score is not None and abs(min_score - max_score) > 0.001:
-        tag = "🔶 Thang 40 chưa rõ môn nhân - xếp hạng bảo thủ"
+        tag = "⚠️ Thang 40 chưa rõ môn nhân - xếp hạng bảo thủ"
         if tag not in annotation:
             annotation = f"{annotation} · {tag}" if annotation else tag
     return annotation
@@ -348,7 +360,7 @@ def _score_missing_inputs_dialog(missing_inputs: list[str]):
 
     col_more, col_keep = st.columns(2)
     with col_more:
-        if st.button("Nhập thêm ↑", key="sa_missing_more", type="primary", use_container_width=True):
+        if st.button("Nhập thêm", icon=":material/expand_less:", key="sa_missing_more", type="primary", use_container_width=True):
             st.session_state.sa_step = 1
             st.session_state.sa_focus_missing_inputs = missing_inputs[:8]
             st.session_state.sa_scroll_to_score_inputs = True
@@ -394,13 +406,19 @@ def render_score_analysis_page():
     # --- Header ---
     col_back, col_title = st.columns([0.15, 0.85])
     with col_back:
-        if st.button("← Trang chủ", key="sa_back_home"):
+        if st.button("Trang chủ", icon=":material/arrow_back:", key="sa_back_home"):
             st.session_state.page = "home"
             st.session_state.sa_step = 1
             st.session_state.sa_max_step = 1
             st.rerun()
     with col_title:
-        st.markdown("## 📊 Phân tích điểm xét tuyển & Gợi ý Trường")
+        st.markdown(
+            '<h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.75rem; font-weight: 700;">'
+            '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-3" style="vertical-align: middle;"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'
+            'Phân tích điểm xét tuyển & Gợi ý Trường'
+            '</h2>',
+            unsafe_allow_html=True
+        )
 
     # --- Step Wizard Bar ---
     step = st.session_state.sa_step
@@ -408,31 +426,38 @@ def render_score_analysis_page():
         st.session_state.sa_max_step = step
     st.session_state.sa_max_step = max(st.session_state.sa_max_step, step)
 
-    steps = ["① Nhập điểm", "② Phương thức", "③ Kết quả AI"]
+    step_labels = ["1. Nhập điểm", "2. Phương thức", "3. Kết quả AI"]
+    step_icons = [":material/edit:", ":material/tune:", ":material/auto_awesome:"]
     step_cols = st.columns(3)
-    for i, (sc, label) in enumerate(zip(step_cols, steps)):
+    for i, (sc, label) in enumerate(zip(step_cols, step_labels)):
         with sc:
             is_unlocked = (i + 1 <= st.session_state.sa_max_step) or (i + 1 == 3 and st.session_state.get("sa_result") is not None)
             
             if i + 1 < step:
-                if st.button(f"✅ {label}", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để quay lại"):
+                if st.button(label, icon=":material/check_circle:", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để quay lại"):
                     st.session_state.sa_step = i + 1
                     st.rerun()
             elif i + 1 == step:
-                st.button(f"👉 {label}", key=f"step_btn_{i}", type="primary", use_container_width=True)
+                st.button(label, icon=step_icons[i], key=f"step_btn_{i}", type="primary", use_container_width=True)
             else:
                 if is_unlocked:
-                    if st.button(f"⬜ {label}", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để đi tới"):
+                    if st.button(label, icon=":material/radio_button_unchecked:", key=f"step_btn_{i}", use_container_width=True, help="Nhấn để đi tới"):
                         st.session_state.sa_step = i + 1
                         st.rerun()
                 else:
-                    st.button(f"⬜ {label}", key=f"step_btn_{i}", disabled=True, use_container_width=True)
+                    st.button(label, icon=":material/lock:", key=f"step_btn_{i}", disabled=True, use_container_width=True)
 
     st.divider()
 
     # ========== STEP 1: NHẬP ĐIỂM ==========
     if step == 1:
-        st.markdown("### 📝 Nhập điểm từng môn")
+        st.markdown(
+            '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil" style="vertical-align: middle;"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>'
+            'Nhập điểm từng môn'
+            '</h3>',
+            unsafe_allow_html=True
+        )
 
         input_mode = st.radio(
             "Chọn phương thức nhập điểm:",
@@ -464,7 +489,6 @@ def render_score_analysis_page():
 
 
         if input_mode == "Nhập điểm thi / Trung bình môn":
-            st.markdown("**Nhập điểm thủ công** *(thang 10)*")
             col_left, col_right = st.columns(2)
             for i, subj in enumerate(MAIN_SUBJECTS):
                 target_col = col_left if i < 5 else col_right
@@ -480,7 +504,8 @@ def render_score_analysis_page():
             # --- Ngoại ngữ phụ (tùy chọn) ---
             from utils.score_calculator import EXTRA_LANGUAGES
             with st.expander(
-                "🌐 Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga) — *bấm để mở*",
+                "Ngoại ngữ khác (Nhật, Trung, Pháp, Đức, Nga)",
+                icon="🌐",
                 expanded=missing_targets["language"],
             ):
                 st.caption("Nếu bạn học ngoại ngữ 2 hoặc thi ngoại ngữ khác ngoài Tiếng Anh, nhập điểm để mở thêm tổ hợp khối D.")
@@ -499,7 +524,8 @@ def render_score_analysis_page():
             # --- Năng khiếu (tùy chọn) ---
             from utils.score_calculator import EXTRA_APTITUDE
             with st.expander(
-                "🎨 Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...) — *bấm để mở*",
+                "Môn Năng khiếu (Vẽ, Âm nhạc, Thể thao...)",
+                icon="🎨",
                 expanded=missing_targets["aptitude"],
             ):
                 st.caption("Nhập điểm các môn năng khiếu để xét tuyển vào các khối V, H, M, N, T, S, R.")
@@ -601,7 +627,7 @@ def render_score_analysis_page():
             invalid_score_inputs = []
             not_taken_subjects = set()
 
-        with st.expander("📜 Chứng chỉ ngoại ngữ (nếu có)", expanded=missing_targets["certificate"]):
+        with st.expander("Chứng chỉ ngoại ngữ (nếu có)", icon="🎫", expanded=missing_targets["certificate"]):
             st.caption("Nhập nếu ngành yêu cầu chứng chỉ IELTS/TOEFL/TOEIC.")
             cert_col1, cert_col2, cert_col3 = st.columns(3)
             with cert_col1:
@@ -611,7 +637,7 @@ def render_score_analysis_page():
             with cert_col3:
                 st.number_input("TOEIC", 0, 990, 0, key="sa_toeic")
 
-        with st.expander("📋 Thông tin THPT bổ sung (nếu ngành yêu cầu)", expanded=missing_targets["school_record"]):
+        with st.expander("Thông tin THPT bổ sung (nếu ngành yêu cầu)", icon="📝", expanded=missing_targets["school_record"]):
             st.caption("Một số ngành yêu cầu ĐTB lớp 12 hoặc học lực.")
             gpa_col1, gpa_col2 = st.columns(2)
             with gpa_col1:
@@ -662,19 +688,20 @@ def render_score_analysis_page():
         raw_bonus = calculate_total_raw_bonus(selected_kv, selected_ut)
         if raw_bonus > 0:
             st.info(
-                f"📌 Tổng điểm ưu tiên gốc: **+{raw_bonus}đ** "
+                f"Tổng điểm ưu tiên gốc: **+{raw_bonus}đ** "
                 f"(KV: +{PRIORITY_KV[selected_kv]}đ + ĐT: +{PRIORITY_UT[selected_ut]}đ). "
-                f"*Lưu ý: Điểm ưu tiên sẽ giảm dần khi tổng 3 môn ≥ 22.5 theo quy chế.*"
+                f"*Lưu ý: Điểm ưu tiên sẽ giảm dần khi tổng 3 môn ≥ 22.5 theo quy chế.*",
+                icon="📌"
             )
 
         # --- Nút tiếp tục ---
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Tiếp tục →", key="sa_next_1", type="primary", use_container_width=True):
+        if st.button("Tiếp tục", icon=":material/arrow_forward:", key="sa_next_1", type="primary", use_container_width=True):
             filled = dict(input_scores)
             if invalid_score_inputs:
-                st.error("❌ Vui lòng kiểm tra lại điểm nhập cho: " + ", ".join(invalid_score_inputs[:6]))
+                st.error("Vui lòng kiểm tra lại điểm nhập cho: " + ", ".join(invalid_score_inputs[:6]))
             elif len(filled) < 3:
-                st.error("❌ Vui lòng nhập ít nhất 3 môn để tính tổ hợp khối thi.")
+                st.error("Vui lòng nhập ít nhất 3 môn để tính tổ hợp khối thi.")
             else:
                 st.session_state.sa_scores = filled
                 st.session_state.sa_not_taken_subjects = not_taken_subjects
@@ -688,7 +715,13 @@ def render_score_analysis_page():
 
     # ========== STEP 2: CHỌN PHƯƠNG THỨC ==========
     elif step == 2:
-        st.markdown("### 🎯 Chọn phương thức xét tuyển")
+        st.markdown(
+            '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-horizontal" style="vertical-align: middle;"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>'
+            'Chọn phương thức xét tuyển'
+            '</h3>',
+            unsafe_allow_html=True
+        )
 
         scores = normalize_scores(st.session_state.sa_scores)
 
@@ -723,8 +756,8 @@ def render_score_analysis_page():
 
         if mode_label == _TRANSCRIPT_MODE_LABEL:
             st.warning(
-                "⚠️ **Lưu ý Quy chế 2026:** Từ năm 2026, không xét riêng học bạ. "
-                "Dữ liệu điểm chuẩn Học bạ từ 2025 trở về trước chỉ mang tính tham khảo."
+                "**Lưu ý Quy chế 2026:** Từ năm 2026, không xét riêng học bạ. "
+                "Học bạ chỉ là tiêu chí phụ hoặc kết hợp. Hãy cân nhắc khi chọn!"
             )
 
         top_k = st.selectbox(
@@ -734,20 +767,20 @@ def render_score_analysis_page():
             key="sa_top_k",
         )
 
-        with st.expander("🛠️ Bộ lọc nâng cao (Tùy chọn)", expanded=False):
+        with st.expander("Bộ lọc nâng cao (Tùy chọn)", icon="⚙️", expanded=False):
             st.markdown("Thu hẹp kết quả tìm kiếm theo sở thích của bạn.")
-            prov_options = ["Tất cả", "Hà Nội", "TP.HCM", "Đà Nẵng", "Cần Thơ", "Khác"]
-            filter_province = st.selectbox("📍 Chọn Tỉnh/Thành phố:", prov_options, key="sa_filter_province")
-            filter_major = st.text_input("🎓 Ngành mong muốn (VD: Máy tính, Kinh tế...):", key="sa_filter_major", placeholder="Gõ từ khóa ngành...")
+            prov_options = ["Tất cả"] + list_provinces()
+            filter_province = st.selectbox("Chọn Tỉnh/Thành phố:", prov_options, key="sa_filter_province")
+            filter_major = st.text_input("Ngành mong muốn (VD: Máy tính, Kinh tế...):", key="sa_filter_major", placeholder="Gõ từ khóa ngành...")
 
         st.markdown("<br>", unsafe_allow_html=True)
         col_back2, col_next2 = st.columns(2)
         with col_back2:
-            if st.button("← Quay lại", key="sa_back_2", use_container_width=True):
+            if st.button("Quay lại", icon=":material/arrow_back:", key="sa_back_2", use_container_width=True):
                 st.session_state.sa_step = 1
                 st.rerun()
         with col_next2:
-            if st.button("🚀 Phân tích ngay!", key="sa_analyze", type="primary", use_container_width=True):
+            if st.button("Phân tích ngay!", icon=":material/rocket_launch:", key="sa_analyze", type="primary", use_container_width=True):
                 mode = _selected_score_mode()
                 methods = ["Xét điểm thi THPT"] if mode == "exam" else ["Xét điểm Học bạ THPT"]
                 payload = _build_score_analysis_payload(mode)
@@ -755,7 +788,7 @@ def render_score_analysis_page():
                 prov_val = None if filter_province == "Tất cả" else filter_province
                 major_val = filter_major.strip() if filter_major.strip() else None
                 
-                with st.spinner("⏳ Đang quét dữ liệu điểm chuẩn..."):
+                with st.spinner("Đang quét dữ liệu điểm chuẩn..."):
                     result = find_top_k_schools(
                         student_scores=payload,
                         methods=methods,
@@ -792,7 +825,7 @@ def render_score_analysis_page():
 
         if "error" in result:
             st.error(result["error"])
-            if st.button("← Quay lại", key="sa_back_err"):
+            if st.button("Quay lại", icon=":material/arrow_back:", key="sa_back_err"):
                 st.session_state.sa_step = 1
                 st.rerun()
             return
@@ -813,7 +846,13 @@ def render_score_analysis_page():
         strength = result.get("strength", {})
         scores = result.get("scores", {})
 
-        st.markdown("### 📊 Phân tích Năng lực")
+        st.markdown(
+            '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trending-up" style="vertical-align: middle;"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>'
+            'Phân tích Năng lực'
+            '</h3>',
+            unsafe_allow_html=True
+        )
         m_cols = st.columns(4)
         with m_cols[0]:
             st.metric("Điểm TB", f"{strength.get('avg', 0)}")
@@ -826,7 +865,13 @@ def render_score_analysis_page():
             st.metric("Số môn nhập", str(strength.get("total_subjects", 0)))
 
         # --- Top tổ hợp ---
-        st.markdown("### 🏆 Top Tổ hợp Khối thi Mạnh nhất")
+        st.markdown(
+            '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trophy" style="vertical-align: middle;"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34"/><path d="M12 2a6 6 0 0 1 6 6v3.58a6 6 0 0 1-5.99 6H12a6 6 0 0 1-6-6V8a6 6 0 0 1 6-6Z"/></svg>'
+            'Top Tổ hợp Khối thi Mạnh nhất'
+            '</h3>',
+            unsafe_allow_html=True
+        )
         top_combos = result.get("top_combinations", [])
         if top_combos:
             combo_cols = st.columns(min(len(top_combos), 5))
@@ -837,10 +882,10 @@ def render_score_analysis_page():
                     
                     if is_diem_liet:
                         status_class = "danger"
-                        warning_html = '<div class="sa-combo-card-alert">🚨 BỊ ĐIỂM LIỆT</div>'
+                        warning_html = '<div class="sa-combo-card-alert"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>BỊ ĐIỂM LIỆT</div>'
                     elif is_below:
                         status_class = "warning"
-                        warning_html = '<div class="sa-combo-card-alert">⚠️ Dưới ngưỡng 15</div>'
+                        warning_html = '<div class="sa-combo-card-alert"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Dưới ngưỡng 15</div>'
                     else:
                         status_class = "success"
                         warning_html = ""
@@ -858,7 +903,13 @@ def render_score_analysis_page():
                     """, unsafe_allow_html=True)
 
         # --- Bảng Top K trường ---
-        st.markdown(f"### 🎓 Top {len(result.get('matched_schools', []))} Trường Phù hợp")
+        st.markdown(
+            f'<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            f'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-graduation-cap" style="vertical-align: middle;"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/><path d="M21.5 12v6"/></svg>'
+            f'Top {len(result.get("matched_schools", []))} Trường Phù hợp'
+            f'</h3>',
+            unsafe_allow_html=True
+        )
         df = result.get("matched_schools")
         if df is not None and not df.empty:
             display_df = _prepare_school_display(df)
@@ -928,18 +979,28 @@ def render_score_analysis_page():
 </div>"""
             st.markdown(table_html, unsafe_allow_html=True)
             st.caption(f"📈 Tổng cộng tìm thấy **{result.get('total_found', 0)}** trường/ngành phù hợp.")
-            st.caption("📐 = Nhân hệ số · 📊 = Thang điểm · ⚠️ = Điều kiện · 📜 = Chứng chỉ · 📋 = Học bạ")
+            st.caption("📏 = Nhân hệ số · 📊 = Thang điểm · ⚠️ = Điều kiện · 🎫 = Chứng chỉ · 📖 = Học bạ")
         else:
             st.info("Không tìm thấy trường phù hợp. Thử mở rộng phương thức xét tuyển hoặc kiểm tra lại điểm.")
 
         # --- Phân tích AI ---
-        st.markdown("### 🤖 Phân tích Chuyên gia AI")
+        st.markdown(
+            '<h3 style="display: flex; align-items: center; gap: 8px; margin-top: 1.5rem; margin-bottom: 0.8rem; font-size: 1.35rem; font-weight: 600;">'
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkles" style="vertical-align: middle;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="m5 3 1 2.5L8.5 6 6 7 5 9.5 4 7 1.5 6 4 5.5z"/><path d="m19 17 1 2.5 2.5.5-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/></svg>'
+            'Phân tích Chuyên gia AI'
+            '</h3>',
+            unsafe_allow_html=True
+        )
         if df is not None and not df.empty:
-            if "sa_ai_analysis_text" in st.session_state and st.session_state.sa_ai_analysis_text:
-                st.markdown(st.session_state.sa_ai_analysis_text)
+            cached_analysis = st.session_state.get("sa_ai_analysis_text")
+            if cached_analysis:
+                st.markdown(cached_analysis)
+                if st.button("Phân tích lại", icon=":material/refresh:", key="sa_ai_retry", type="secondary"):
+                    st.session_state.pop("sa_ai_analysis_text", None)
+                    st.rerun()
             else:
-                if st.button("✨ Nhận Phân tích từ Chuyên gia AI", key="sa_btn_ai_analysis"):
-                    with st.spinner("⏳ AI đang phân tích..."):
+                if st.button("Nhận Phân tích từ Chuyên gia AI", icon=":material/auto_awesome:", key="sa_btn_ai_analysis"):
+                    with st.spinner("AI đang phân tích..."):
                         try:
                             stream = generate_analysis_stream(result)
                             if stream:
@@ -948,13 +1009,13 @@ def render_score_analysis_page():
                             else:
                                 st.info("AI không thể phân tích lúc này. Vui lòng tham khảo bảng dữ liệu ở trên.")
                         except Exception as e:
-                            st.warning(f"⚠️ AI tạm thời không khả dụng: {e}")
+                            st.warning(f"AI tạm thời không khả dụng: {e}")
 
         # --- Action buttons ---
         st.markdown("<br>", unsafe_allow_html=True)
         col_a1, col_a2 = st.columns(2)
         with col_a1:
-            if st.button("🔄 Phân tích lại", key="sa_retry", use_container_width=True):
+            if st.button("Phân tích lại", icon=":material/refresh:", key="sa_retry", use_container_width=True):
                 st.session_state.sa_step = 1
                 st.session_state.sa_max_step = 1
                 if st.session_state.get("sa_mode") == "exam":

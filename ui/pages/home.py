@@ -63,7 +63,9 @@ def render_home_page():
         st.markdown("""
         <div class="r-card anim-fade-up anim-delay-2">
             <div class="r-card-num">01</div>
-            <div class="r-card-icon pink">🎯</div>
+            <div class="r-card-icon pink">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-compass"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+            </div>
             <div class="r-card-title">Định hướng ngành</div>
             <div class="r-card-desc">Phân tích ngành nghề phù hợp dựa trên thế mạnh cá nhân.</div>
         </div>
@@ -72,7 +74,9 @@ def render_home_page():
         st.markdown("""
         <div class="r-card anim-fade-up anim-delay-3">
             <div class="r-card-num">02</div>
-            <div class="r-card-icon blue">📊</div>
+            <div class="r-card-icon blue">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bar-chart-3"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            </div>
             <div class="r-card-title">Tra cứu điểm chuẩn</div>
             <div class="r-card-desc">Dữ liệu tuyển sinh cập nhật chính xác, dự báo cơ hội.</div>
         </div>
@@ -81,7 +85,9 @@ def render_home_page():
         st.markdown("""
         <div class="r-card anim-fade-up anim-delay-4">
             <div class="r-card-num">03</div>
-            <div class="r-card-icon pink">✨</div>
+            <div class="r-card-icon pink">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkles"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="m5 3 1 2.5L8.5 6 6 7 5 9.5 4 7 1.5 6 4 5.5z"/><path d="m19 17 1 2.5 2.5.5-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/></svg>
+            </div>
             <div class="r-card-title">Phân tích học bạ AI</div>
             <div class="r-card-desc">Tải học bạ lên, AI đánh giá năng lực và chỉ ra cơ hội.</div>
         </div>
@@ -90,7 +96,7 @@ def render_home_page():
     st.markdown("<br>", unsafe_allow_html=True)
     _, c_score, _ = st.columns([1, 1, 1])
     with c_score:
-        if st.button("📊 Phân tích Học bạ", use_container_width=True, type="primary"):
+        if st.button("Phân tích Học bạ", icon=":material/analytics:", use_container_width=True, type="primary"):
             st.session_state.page = "score_analysis"
             st.rerun()
 
