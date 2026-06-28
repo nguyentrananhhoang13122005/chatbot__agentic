@@ -53,6 +53,8 @@ def render_profile_page():
     display_name = user.get("display_name") or "Người dùng"
     email = user.get("email") or ""
     avatar_letter = display_name[0].upper() if display_name else "U"
+    auth_provider = user.get("auth_provider", "email")
+    provider_label = "Google" if auth_provider == "google" else "Email"
     google_icon_svg = '<svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px; fill: currentColor;"><path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.2-5.137 4.2a5.7 5.7 0 0 1-5.7-5.7 5.7 5.7 0 0 1 5.7-5.7c2.49 0 4.548 1.83 5.378 4.2h4.296C22.68 5.61 17.88 2 12.24 2 6.585 2 2 6.585 2 12.24s4.585 10.24 10.24 10.24c5.79 0 10.428-4.14 10.428-10.24 0-.66-.075-1.35-.195-1.955H12.24z"/></svg>'
     mail_icon_svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'
     provider_icon = google_icon_svg if auth_provider == "google" else mail_icon_svg
