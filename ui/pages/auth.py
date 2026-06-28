@@ -26,7 +26,11 @@ def login_dialog():
     _store_oauth_state(state)
     google_auth_url = get_google_auth_url(state=state)
     st.markdown("**Đăng nhập nhanh**")
-    st.link_button("🔵 Tiếp tục bằng Google", google_auth_url, use_container_width=True)
+    safe_url = html.escape(google_auth_url, quote=True)
+    st.markdown(
+        f'<a href="{safe_url}" target="_self" class="google-login-link">🔵 Tiếp tục bằng Google</a>',
+        unsafe_allow_html=True,
+    )
     st.divider()
     st.markdown("**Hoặc dùng email**")
     tab_login, tab_register = st.tabs(["Đăng nhập", "Đăng ký"])
