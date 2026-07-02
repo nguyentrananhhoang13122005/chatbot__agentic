@@ -15,3 +15,5 @@ bcrypt==4.3.0
 requests>=2.31.0
 streamlit-mic-recorder>=0.0.8
 gTTS>=2.5.1
+fastapi
+uvicorn[standard]
