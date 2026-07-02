@@ -192,7 +192,7 @@ def _general_llm_stream(user_query: str, chat_history: list = None):
 
 
 # ======== BƯỚC 2: GIAO VIỆC CHO ĐÚNG AGENT (Dispatch Only) ========
-def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None, chat_history: list = None) -> str:
+def dispatch_to_agent(classification: dict, user_query: str, chat_history: list = None) -> str:
     """
     Router Section 2: Dựa trên kết quả phân loại, giao việc cho đúng Agent.
     - RECOMMENDER → agents/recommender.py (Tra cứu điểm chuẩn)
@@ -205,7 +205,7 @@ def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None,
     if intent == "GENERAL":
         return _general_llm_answer(user_query, chat_history)
     elif intent == "COUNSELOR":
-        return tu_van_cv(cv_file=uploaded_file, user_query=user_query)
+        return tu_van_cv(score_table="", user_query=user_query)
     if intent == "RECOMMENDER":
         return query_diem_chuan(
             user_query=standalone_query,
@@ -216,7 +216,7 @@ def dispatch_to_agent(classification: dict, user_query: str, uploaded_file=None,
         )
 
 
-def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_file=None, chat_history: list = None):
+def dispatch_to_agent_stream(classification: dict, user_query: str, chat_history: list = None):
     """
     Router Section 2 Streaming: Dựa trên kết quả phân loại, giao việc cho đúng Agent và trả về kết quả stream/structured response.
     """
@@ -225,7 +225,7 @@ def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_fil
     if intent == "GENERAL":
         return _general_llm_stream(user_query, chat_history)
     elif intent == "COUNSELOR":
-        return tu_van_cv_stream(cv_file=uploaded_file, user_query=user_query)
+        return tu_van_cv_stream(score_table="", user_query=user_query)
     else:
         recommender_response = query_diem_chuan_stream(
             user_query=classification.get("standalone_query", user_query),
@@ -238,8 +238,8 @@ def dispatch_to_agent_stream(classification: dict, user_query: str, uploaded_fil
 
 
 # ======== WRAPPER (Backward compatibility) ========
-def route_query(user_query: str, has_file: bool = False, uploaded_file=None, chat_history: list = None) -> str:
+def route_query(user_query: str, has_file: bool = False, chat_history: list = None) -> str:
     """Wrapper gọi classify → dispatch tuần tự."""
     classification = classify_query(user_query, has_file, chat_history)
-    return dispatch_to_agent(classification, user_query, uploaded_file, chat_history)
+    return dispatch_to_agent(classification, user_query, chat_history)
 
