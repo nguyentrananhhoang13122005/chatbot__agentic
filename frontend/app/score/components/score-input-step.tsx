@@ -24,7 +24,7 @@ export function ScoreInputStep({ state, dispatch }: ScoreInputStepProps) {
     dispatch({ type: "TOGGLE_NOT_TAKEN", payload: { subject, notTaken } });
   };
 
-  const canProceed = state.mode === "transcript" || validateMinSubjects(state.scores, 3);
+  const canProceed = validateMinSubjects(state.scores, 3);
 
   const calculateTotalBonus = () => {
     const kv = PRIORITY_KV[state.kvSelected] || 0;
@@ -190,7 +190,7 @@ export function ScoreInputStep({ state, dispatch }: ScoreInputStepProps) {
           onClick={() => dispatch({ type: "SET_STEP", payload: 2 })}
           className="px-8 shadow-lg shadow-primary/20"
         >
-          {state.mode === "exam" && !canProceed ? "Vui lòng nhập ít nhất 3 môn" : "Tiếp tục"}
+          {!canProceed ? "Vui lòng nhập ít nhất 3 môn" : "Tiếp tục"}
           <ArrowRight className="ml-2 w-4 h-4" />
         </Button>
       </div>

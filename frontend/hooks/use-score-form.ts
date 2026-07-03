@@ -56,7 +56,7 @@ const initialState: ScoreState = {
   kvSelected: "KV3",
   utSelected: "Không",
   bonus: 0.0,
-  methods: ["Xét điểm thi THPT", "Xét điểm Học bạ THPT"],
+  methods: ["Xét điểm thi THPT"],
   topK: 15,
   aiAnalysis: "",
   isLoading: false,
@@ -66,8 +66,12 @@ function scoreReducer(state: ScoreState, action: ScoreAction): ScoreState {
   switch (action.type) {
     case "SET_STEP":
       return { ...state, step: action.payload };
-    case "SET_MODE":
-      return { ...state, mode: action.payload };
+    case "SET_MODE": {
+      const defaultMethods = action.payload === "exam"
+        ? ["Xét điểm thi THPT"]
+        : ["Xét điểm Học bạ THPT"];
+      return { ...state, mode: action.payload, methods: defaultMethods };
+    }
     case "SET_SCORE":
       return {
         ...state,
@@ -89,7 +93,7 @@ function scoreReducer(state: ScoreState, action: ScoreAction): ScoreState {
     case "SET_FILTERS":
       return { ...state, ...action.payload };
     case "SET_RESULT":
-      return { ...state, result: action.payload, aiAnalysis: action.payload.analysis, isLoading: false };
+      return { ...state, result: action.payload, aiAnalysis: action.payload.analysis ?? "" };
     case "APPEND_ANALYSIS":
       return { ...state, aiAnalysis: state.aiAnalysis + action.payload };
     case "SET_LOADING":

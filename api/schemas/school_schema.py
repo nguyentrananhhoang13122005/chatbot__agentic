@@ -5,7 +5,7 @@ class MatchRequest(BaseModel):
     scores: Dict[str, float] = Field(..., description="Điểm các môn (VD: {'Toán': 8.5, 'Vật lý': 9.0})")
     bonus: float = Field(0.0, description="Điểm ưu tiên")
     methods: Optional[List[str]] = Field(
-        default=["Xét điểm thi THPT", "Xét điểm Học bạ THPT"], 
+        default=["Xét điểm thi THPT"], 
         description="Phương thức xét tuyển"
     )
     k: int = Field(5, description="Số lượng trường/ngành gợi ý")
@@ -14,6 +14,13 @@ class MatchRequest(BaseModel):
     province: Optional[str] = Field(None, description="Lọc theo Tỉnh/Thành phố")
     major: Optional[str] = Field(None, description="Lọc theo Ngành học")
     stream: bool = Field(False, description="Trả về StreamingResponse (true) hay JSON tĩnh (false)")
+    # Extra fields — forwarded for future pipeline use
+    ielts: Optional[float] = Field(None, description="Điểm IELTS")
+    toefl: Optional[int] = Field(None, description="Điểm TOEFL iBT")
+    toeic: Optional[int] = Field(None, description="Điểm TOEIC")
+    gpa12: Optional[float] = Field(None, description="ĐTB lớp 12")
+    rank12: Optional[str] = Field(None, description="Học lực lớp 12")
+    not_taken_subjects: Optional[List[str]] = Field(default=[], description="Các môn không thi")
 
 class SchoolMatchResult(BaseModel):
     schools: List[Dict[str, Any]] = Field(..., description="Danh sách các trường phù hợp")

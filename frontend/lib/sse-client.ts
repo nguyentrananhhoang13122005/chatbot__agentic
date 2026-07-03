@@ -5,7 +5,12 @@ export type SSECallback = {
   onError?: (err: unknown) => void;
 };
 
-export async function fetchSSE(url: string, body: Record<string, unknown>, callbacks: SSECallback) {
+export async function fetchSSE(
+  url: string,
+  body: Record<string, unknown>,
+  callbacks: SSECallback,
+  signal?: AbortSignal,
+) {
   try {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
@@ -17,6 +22,7 @@ export async function fetchSSE(url: string, body: Record<string, unknown>, callb
         "Accept": "text/event-stream",
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!res.ok) {
@@ -67,6 +73,8 @@ export async function fetchSSE(url: string, body: Record<string, unknown>, callb
       }
     }
   } catch (err) {
+    // Silent abort — user navigated away or triggered re-run
+    if (err instanceof DOMException && err.name === "AbortError") return;
     callbacks.onError?.(err);
   }
 }
