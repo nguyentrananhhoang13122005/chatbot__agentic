@@ -51,10 +51,10 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           dispatch({ 
             type: "SET_RESULT", 
             payload: { 
-              schools: meta.schools || [],
-              top_combinations: meta.top_combinations || [],
-              strength: meta.strength || {},
-              warnings: meta.warnings || [],
+              schools: (meta.schools as Record<string, unknown>[]) || [],
+              top_combinations: (meta.top_combinations as Record<string, unknown>[]) || [],
+              strength: (meta.strength as Record<string, unknown>) || {},
+              warnings: (meta.warnings as string[]) || [],
               analysis: ""
             } 
           });
