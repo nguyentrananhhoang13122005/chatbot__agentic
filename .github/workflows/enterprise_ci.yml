@@ -8,7 +8,7 @@ on:
 
 jobs:
   # ==========================================
-  # 1. DOCKER CI/CD / DETECT CHANGES
+  # 1. DETECT CHANGES
   # ==========================================
   detect-changes:
     name: Docker CI/CD / Detect Changes
@@ -28,8 +28,7 @@ jobs:
               - 'Dockerfile'
               - 'docker-compose.yml'
             frontend:
-              - 'frontend/**'
-              - 'package.json'
+              - 'next-app/**'
 
   # ==========================================
   # 2. BACKEND CI
@@ -104,14 +103,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./frontend
+        working-directory: ./next-app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: './frontend/package-lock.json'
+          cache-dependency-path: './next-app/package-lock.json'
       - run: npm ci
       - run: npm run lint
       - run: npm run build
@@ -135,24 +134,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create mock frontend Dockerfile
+      - name: Create Frontend Dockerfile
         run: |
-          echo 'FROM node:20-alpine' > frontend/Dockerfile
-          echo 'WORKDIR /app' >> frontend/Dockerfile
-          echo 'COPY package*.json ./' >> frontend/Dockerfile
-          echo 'RUN npm ci' >> frontend/Dockerfile
-          echo 'COPY . .' >> frontend/Dockerfile
-          echo 'RUN npm run build' >> frontend/Dockerfile
+          cat > next-app/Dockerfile << 'EOF'
+          FROM node:22-alpine AS builder
+          WORKDIR /app
+          COPY package*.json ./
+          RUN npm ci
+          COPY . .
+          RUN npm run build
+
+          FROM node:22-alpine AS runner
+          WORKDIR /app
+          ENV NODE_ENV=production
+          COPY --from=builder /app/.next/standalone ./
+          COPY --from=builder /app/.next/static ./.next/static
+          EXPOSE 3000
+          CMD ["node", "server.js"]
+          EOF
       - name: Build Frontend Docker Image
-        run: docker build -t unisearch-frontend:test ./frontend
+        run: docker build -t unisearch-frontend:test ./next-app
 
   # ==========================================
-  # 4. DOCKER CI/CD / DEPLOY
+  # 5. DOCKER CI/CD / DEPLOY
   # ==========================================
   trigger-deploy:
     name: Docker CI/CD / Trigger Deploy Webhook
     needs: [build-backend-image, build-frontend-image]
-    # Always run this step if dependencies are successful or skipped
     if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
