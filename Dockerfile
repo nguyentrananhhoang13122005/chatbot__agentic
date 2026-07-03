@@ -32,8 +32,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy toàn bộ mã nguồn vào Container
 COPY . .
 
-# Expose cổng mặc định của Streamlit
-EXPOSE 8501
+# Expose cổng của FastAPI
+EXPOSE 8000
 
-# Chạy ứng dụng
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Chạy ứng dụng FastAPI bằng Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
