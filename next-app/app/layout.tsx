@@ -36,7 +36,7 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="unisearch-theme"
         >
-          <TooltipProvider delayDuration={300}>
+          <TooltipProvider delay={300}>
             <Navbar />
             <main className="flex-1">
               {children}
