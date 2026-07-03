@@ -1,14 +1,26 @@
-# === UniSearch AI — Dependencies ===
-streamlit==1.55.0
-pandas==2.2.3
-openai==2.36.0
-python-dotenv==1.2.2
-numpy
-pytest==9.0.3
-bandit==1.9.4
-bcrypt==4.3.0
+# === UniSearch AI — Backend Dependencies ===
+
+# --- Core Framework ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+
+# --- AI / LLM ---
+openai>=2.36.0
+
+# --- Data Processing ---
+pandas>=2.2.3
+numpy>=1.26.0
+
+# --- Utilities ---
+python-dotenv>=1.2.2
 requests>=2.31.0
-streamlit-mic-recorder>=0.0.8
-gTTS>=2.5.1
-fastapi
-uvicorn[standard]
+tenacity>=8.2.0
+
+# --- Dev / Testing ---
+pytest>=9.0.3
+pytest-cov>=5.0.0
+
+# --- Security (CI) ---
+bandit>=1.9.4
+pip-audit>=2.7.0

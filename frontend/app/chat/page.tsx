@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { fetchSSE } from "@/lib/sse-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Send, Sparkles, User, GraduationCap, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 

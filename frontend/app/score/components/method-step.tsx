@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
 import { apiClient } from "@/lib/api-client";
 import { CombinationResult } from "@/types";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ArrowRight, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MethodStepProps {
@@ -21,21 +21,26 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Serialize scores to a stable string key to avoid re-fetch on every reference change
+  const scoresKey = useMemo(() => {
+    // Only include entries with defined values
+    const clean: Record<string, number> = {};
+    Object.entries(state.scores).forEach(([k, v]) => {
+      if (v !== undefined) clean[k] = v;
+    });
+    return JSON.stringify(clean);
+  }, [state.scores]);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    // Fetch combinations when step 2 mounts
+    // Fetch combinations when step 2 mounts, debounced by 300ms
     const fetchCombos = async () => {
       try {
         setLoading(true);
-        // Clean scores: remove undefined
-        const cleanScores: Record<string, number> = {};
-        Object.entries(state.scores).forEach(([k, v]) => {
-          if (v !== undefined) cleanScores[k] = v;
-        });
+        setError(null);
+        const cleanScores: Record<string, number> = JSON.parse(scoresKey);
 
-        // Add IELTS converted if present
-        // In real app, we might need a mapping function, but for now we send what we have or rely on backend
-        // Actually, backend expects "Điểm Quy Đổi IELTS" or something if we want it. We just pass `scores` dict.
-        
         const res = await apiClient.calculateScore({
           scores: cleanScores,
           bonus: state.bonus,
@@ -43,15 +48,21 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
         });
         
         setCombos(res.top_combinations);
-      } catch (err: any) {
-        setError(err.message || "Failed to calculate combinations");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to calculate combinations");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCombos();
-  }, [state.scores, state.bonus]);
+    // Clear previous debounce timer and set a new one
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(fetchCombos, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [scoresKey, state.bonus]);
 
   const handleStartAnalysis = async () => {
     dispatch({ type: "SET_LOADING", payload: true });
@@ -173,7 +184,7 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Lọc theo Khu vực / Tỉnh thành (Tùy chọn)</label>
-                <Select value={state.filterProvince || "all"} onValueChange={(v) => dispatch({ type: "SET_FILTERS", payload: { filterProvince: v === "all" ? undefined : v } })}>
+                <Select value={state.filterProvince || "all"} onValueChange={(v) => dispatch({ type: "SET_FILTERS", payload: { filterProvince: v === "all" ? undefined : (v ?? undefined) } })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Tất cả khu vực" />
                   </SelectTrigger>
@@ -225,29 +236,5 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
         </Button>
       </div>
     </div>
-  );
-}
-
-// Sparkles icon inline since it was missed in imports
-function Sparkles(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-      <path d="M5 3v4" />
-      <path d="M19 17v4" />
-      <path d="M3 5h4" />
-      <path d="M17 19h4" />
-    </svg>
   );
 }

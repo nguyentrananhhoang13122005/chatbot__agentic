@@ -19,21 +19,19 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
   const [grid, setGrid] = useState<Record<string, Record<string, number | undefined>>>({});
 
   const handleScoreChange = (subject: string, semester: string, value: number | undefined) => {
-    const newGrid = { ...grid };
-    if (!newGrid[subject]) newGrid[subject] = {};
-    newGrid[subject][semester] = value;
+    const newGrid = { ...grid, [subject]: { ...(grid[subject] || {}), [semester]: value } };
     setGrid(newGrid);
-    updateAverage(subject, newGrid);
+    updateAverage(subject, newGrid, formula);
   };
 
-  const updateAverage = (subject: string, currentGrid: typeof grid) => {
+  const updateAverage = (subject: string, currentGrid: typeof grid, currentFormula: "5HK" | "6HK" | "L12") => {
     const scores = currentGrid[subject] || {};
     let sum = 0;
     let count = 0;
 
-    const semestersToCount = 
-      formula === "5HK" ? SEMESTERS.slice(0, 5) :
-      formula === "6HK" ? SEMESTERS :
+    const semestersToCount =
+      currentFormula === "5HK" ? SEMESTERS.slice(0, 5) :
+      currentFormula === "6HK" ? SEMESTERS :
       SEMESTERS.slice(4, 6);
 
     for (const sem of semestersToCount) {
@@ -43,8 +41,7 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
       }
     }
 
-    if (count === semestersToCount.length) {
-      // Calculate average
+    if (count === semestersToCount.length && count > 0) {
       const avg = Math.round((sum / count) * 100) / 100;
       dispatch({ type: "SET_SCORE", payload: { subject, value: avg } });
     } else {
@@ -54,7 +51,8 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
 
   const handleFormulaChange = (val: "5HK" | "6HK" | "L12") => {
     setFormula(val);
-    ALL_SUBJECTS.forEach(subj => updateAverage(subj, grid));
+    // Pass `val` (new formula) explicitly to avoid stale closure reading old `formula` state
+    ALL_SUBJECTS.forEach(subj => updateAverage(subj, grid, val));
   };
 
   return (
@@ -64,7 +62,7 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
           <h3 className="font-medium text-foreground">Công thức xét Học bạ</h3>
           <p className="text-sm text-muted-foreground">Chọn công thức tính điểm trung bình (ĐTB) các môn học</p>
         </div>
-        <Select value={formula} onValueChange={(val: any) => handleFormulaChange(val)}>
+        <Select value={formula} onValueChange={(val) => handleFormulaChange(val as "5HK" | "6HK" | "L12")}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Chọn công thức" />
           </SelectTrigger>
@@ -100,7 +98,7 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
             </tr>
           </thead>
           <tbody>
-            {ALL_SUBJECTS.map((subject, idx) => {
+            {ALL_SUBJECTS.map((subject) => {
               // Calculate preview average for display
               const scores = grid[subject] || {};
               let sum = 0; let count = 0;

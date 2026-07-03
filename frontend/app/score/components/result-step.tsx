@@ -51,10 +51,10 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           dispatch({ 
             type: "SET_RESULT", 
             payload: { 
-              schools: meta.schools || [],
-              top_combinations: meta.top_combinations || [],
-              strength: meta.strength || {},
-              warnings: meta.warnings || [],
+              schools: (meta.schools as Record<string, unknown>[]) || [],
+              top_combinations: (meta.top_combinations as Record<string, unknown>[]) || [],
+              strength: (meta.strength as Record<string, unknown>) || {},
+              warnings: (meta.warnings as string[]) || [],
               analysis: ""
             } 
           });
@@ -117,7 +117,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <h3 className="font-heading text-lg font-semibold px-1">Tổ hợp môn xét tuyển</h3>
-            <ComboCards combos={combos} />
+            <ComboCards combos={combos as Array<{ code: string; subjects: string[]; total: number; below_threshold?: boolean }>} />
           </div>
           <div className="lg:col-span-1">
             <AIAnalysisPanel 
