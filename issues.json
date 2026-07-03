@@ -1,0 +1,122 @@
+[
+  {
+    "title": "feat(api): implement schools Match Maker and Recommender endpoints (T…",
+    "body": "…ask 4)"
+  },
+  {
+    "title": "refactor: remove OCR feature to optimize performance (Task 3 cancelled)",
+    "body": ""
+  },
+  {
+    "title": "feat(api): implement REST API for score calculator (Task 2)",
+    "body": ""
+  },
+  {
+    "title": "[Phase 3] Task 10: Cap nhat Dockerfile va docker-compose",
+    "body": "Cau hinh Docker chay 2 container (FastAPI va Next.js). Cap nhat README deploy."
+  },
+  {
+    "title": "[Phase 3] Task 9: Tich hop API (Frontend goi Backend)",
+    "body": "Dung fetch API goi FastAPI endpoint. Xu ly loading, error, luong data."
+  },
+  {
+    "title": "[Phase 2] Task 8: Xay dung Dashboard Hien thi Ket qua",
+    "body": "Man hinh ket qua tra cuu. Bieu do ty le do, cards phan loai Safe/Target/Reach."
+  },
+  {
+    "title": "[Phase 2] Task 7: Xay dung Giao dien Upload va Kiem tra OCR",
+    "body": "Component keo-tha PDF. Bang du lieu (Data Table) cho phep edit ket qua AI OCR truoc khi gui."
+  },
+  {
+    "title": "[Phase 2] Task 6: Xay dung Landing Page va Form Nhap Diem",
+    "body": "Thiet ke UI man hinh chinh. Form nhap diem thi nang dong co validation."
+  },
+  {
+    "title": "[Phase 2] Task 5: Khoi tao Project Next.js va Design System",
+    "body": "Khoi tao Next.js App Router. Cai dat TailwindCSS va shadcn/ui. Xay dung base components."
+  },
+  {
+    "title": "[Phase 1] Task 4: Xay dung REST API cho Module Match Maker",
+    "body": "Viet endpoint /api/v1/schools/match. Tich hop agents/match_maker.py va agents/recommender.py."
+  },
+  {
+    "title": "[Phase 1] Task 3: Xay dung REST API cho Module OCR Hoc Ba",
+    "body": "Viet endpoint /api/v1/ocr/upload. Tich hop agents/counselor.py boc tach diem. Tra ket qua JSON."
+  },
+  {
+    "title": "[Phase 1] Task 2: Xay dung REST API cho Module Tinh Diem",
+    "body": "Viet endpoint /api/v1/scores/calculate. Tao Pydantic Models. Tai su dung logic core/score_calculator"
+  },
+  {
+    "title": "[Phase 1] Task 1: Khoi tao FastAPI va Cau hinh Architecture",
+    "body": "Chuyen doi entrypoint tu app.py (Streamlit) sang FastAPI. Cau hinh CORS. Cau truc thu muc routers, s"
+  },
+  {
+    "title": "feat: implement Settings page with Theme, Password change, CSV export…",
+    "body": "… and account deletion"
+  },
+  {
+    "title": "pref/Setting",
+    "body": ""
+  },
+  {
+    "title": "fix(auth): redirect Google OAuth in same tab instead of opening new tab",
+    "body": ""
+  },
+  {
+    "title": "Changeicon",
+    "body": ""
+  },
+  {
+    "title": "Fix:mở tab mới mỗi khi login",
+    "body": ""
+  },
+  {
+    "title": "Thay đổi icon",
+    "body": ""
+  },
+  {
+    "title": "fix: resolve circular imports, update docker configs, and hide sideba…",
+    "body": "…r buttons"
+  },
+  {
+    "title": "docs: remove chatbot references, focus on score analysis",
+    "body": ""
+  },
+  {
+    "title": "feat(devops): add Docker support with PyTorch CPU optimization (Issue…",
+    "body": "… #53)"
+  },
+  {
+    "title": "chore: remove unused dead files and one-off scripts",
+    "body": ""
+  },
+  {
+    "title": "refactor(ui): split components.py and extract main.css",
+    "body": ""
+  },
+  {
+    "title": "fix(ui): responsive custom transcript editor for mobile like tuyensin…",
+    "body": "…h247"
+  },
+  {
+    "title": "feat: improve admission analysis prompt",
+    "body": ""
+  },
+  {
+    "title": "feat: add advanced filters for province and major",
+    "body": ""
+  },
+  {
+    "title": "buld map data",
+    "body": "Tại môi trường Dev (Ngay bây giờ): Tôi sẽ viết một file script scripts/generate_provinces.py. Script"
+  },
+  {
+    "title": "feat: redesign dark mode and fix ui bugs",
+    "body": ""
+  },
+  {
+    "title": "Tối ưu cột ghi chú trong file điểm chuẩn",
+    "body": ""
+  }
+]
