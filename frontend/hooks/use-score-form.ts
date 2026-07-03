@@ -40,7 +40,7 @@ export type ScoreAction =
   | { type: "SET_MODE"; payload: InputMode }
   | { type: "SET_SCORE"; payload: { subject: string; value: number | undefined } }
   | { type: "TOGGLE_NOT_TAKEN"; payload: { subject: string; notTaken: boolean } }
-  | { type: "SET_EXTRA"; payload: { field: "ielts" | "toefl" | "toeic" | "gpa12" | "rank12"; value: any } }
+  | { type: "SET_EXTRA"; payload: { field: "ielts" | "toefl" | "toeic" | "gpa12" | "rank12"; value: number | string } }
   | { type: "SET_PRIORITY"; payload: { kv: string; ut: string; bonus: number } }
   | { type: "SET_FILTERS"; payload: Partial<Pick<ScoreState, "methods" | "topK" | "filterProvince" | "filterMajor">> }
   | { type: "SET_RESULT"; payload: SchoolMatchResult }

@@ -14,7 +14,7 @@ export interface CombinationResult {
 
 export interface ScoreCalculationResponse {
   top_combinations: CombinationResult[];
-  analysis: Record<string, any>;
+  analysis: Record<string, unknown>;
 }
 
 export interface MatchRequest {
@@ -30,9 +30,9 @@ export interface MatchRequest {
 }
 
 export interface SchoolMatchResult {
-  schools: Record<string, any>[];
-  top_combinations: Record<string, any>[];
-  strength: Record<string, any>;
+  schools: Record<string, unknown>[];
+  top_combinations: Record<string, unknown>[];
+  strength: Record<string, unknown>;
   warnings: string[];
   analysis: string;
 }

@@ -3,8 +3,22 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BookOpen, GraduationCap, Info } from "lucide-react";
 
+interface SchoolRecord {
+  school_name?: string;
+  major_name?: string;
+  major_code?: string;
+  combo?: string;
+  score?: number | string;
+  year_score?: number | string;
+  year?: number | string;
+  tier?: string;
+  method?: string;
+  notes?: string;
+  [key: string]: unknown;
+}
+
 interface SchoolTableProps {
-  schools: any[];
+  schools: SchoolRecord[];
 }
 
 export function SchoolTable({ schools }: SchoolTableProps) {

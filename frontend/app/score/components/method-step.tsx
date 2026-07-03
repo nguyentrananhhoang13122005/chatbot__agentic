@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, ArrowRight, Loader2, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MethodStepProps {
@@ -48,8 +48,8 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
         });
         
         setCombos(res.top_combinations);
-      } catch (err: any) {
-        setError(err.message || "Failed to calculate combinations");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to calculate combinations");
       } finally {
         setLoading(false);
       }

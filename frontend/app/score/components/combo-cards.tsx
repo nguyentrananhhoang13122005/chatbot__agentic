@@ -8,7 +8,6 @@ interface ComboCardsProps {
     subjects: string[];
     total: number;
     below_threshold?: boolean;
-    [key: string]: any;
   }>;
 }
 

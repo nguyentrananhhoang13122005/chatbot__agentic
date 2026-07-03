@@ -62,7 +62,7 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
           <h3 className="font-medium text-foreground">Công thức xét Học bạ</h3>
           <p className="text-sm text-muted-foreground">Chọn công thức tính điểm trung bình (ĐTB) các môn học</p>
         </div>
-        <Select value={formula} onValueChange={(val: any) => handleFormulaChange(val)}>
+        <Select value={formula} onValueChange={(val) => handleFormulaChange(val as "5HK" | "6HK" | "L12")}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Chọn công thức" />
           </SelectTrigger>
@@ -98,7 +98,7 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
             </tr>
           </thead>
           <tbody>
-            {ALL_SUBJECTS.map((subject, idx) => {
+            {ALL_SUBJECTS.map((subject) => {
               // Calculate preview average for display
               const scores = grid[subject] || {};
               let sum = 0; let count = 0;

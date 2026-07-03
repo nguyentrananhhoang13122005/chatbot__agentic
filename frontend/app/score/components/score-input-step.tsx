@@ -1,7 +1,7 @@
 "use client";
 
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
-import { MAIN_SUBJECTS, EXTRA_LANGUAGES, EXTRA_APTITUDE, PRIORITY_KV, PRIORITY_UT } from "@/lib/constants";
+import { MAIN_SUBJECTS, PRIORITY_KV, PRIORITY_UT } from "@/lib/constants";
 import { ScoreInput } from "@/components/ui/score-input";
 import { TranscriptEditor } from "./transcript-editor";
 import { Button } from "@/components/ui/button";
