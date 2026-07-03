@@ -95,7 +95,29 @@ jobs:
           fi
 
   # ==========================================
-  # 3. DOCKER CI/CD / BUILD IMAGES
+  # 3. FRONTEND CI
+  # ==========================================
+  frontend-ci:
+    name: Frontend CI / Lint & Build Check
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  # ==========================================
+  # 4. DOCKER CI/CD / BUILD IMAGES
   # ==========================================
   build-backend-image:
     name: Docker CI/CD / Build Backend Image
@@ -108,7 +130,7 @@ jobs:
 
   build-frontend-image:
     name: Docker CI/CD / Build Frontend Image
-    needs: detect-changes
+    needs: [detect-changes, frontend-ci]
     if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
