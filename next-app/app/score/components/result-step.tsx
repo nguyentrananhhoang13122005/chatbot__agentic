@@ -117,7 +117,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             <h3 className="font-heading text-lg font-semibold px-1">Tổ hợp môn xét tuyển</h3>
-            <ComboCards combos={combos} />
+            <ComboCards combos={combos as any} />
           </div>
           <div className="lg:col-span-1">
             <AIAnalysisPanel 

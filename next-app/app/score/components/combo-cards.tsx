@@ -1,10 +1,15 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { CombinationResult } from "@/types";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ComboCardsProps {
-  combos: CombinationResult[];
+  combos: Array<{
+    code: string;
+    subjects: string[];
+    total: number;
+    below_threshold?: boolean;
+    [key: string]: any;
+  }>;
 }
 
 export function ComboCards({ combos }: ComboCardsProps) {

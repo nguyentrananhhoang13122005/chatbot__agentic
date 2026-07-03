@@ -107,7 +107,7 @@ export function ScoreInputStep({ state, dispatch }: ScoreInputStepProps) {
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-1/3 text-sm font-medium">IELTS</div>
-                <Select value={state.ielts ? String(state.ielts) : "0"} onValueChange={(val) => dispatch({ type: "SET_EXTRA", payload: { field: "ielts", value: parseFloat(val) } })}>
+                <Select value={state.ielts ? String(state.ielts) : "0"} onValueChange={(val) => dispatch({ type: "SET_EXTRA", payload: { field: "ielts", value: parseFloat(val ?? "0") } })}>
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Không có" />
                   </SelectTrigger>
@@ -139,6 +139,7 @@ export function ScoreInputStep({ state, dispatch }: ScoreInputStepProps) {
                 <Select 
                   value={state.kvSelected} 
                   onValueChange={(val) => {
+                    if (!val) return;
                     dispatch({ type: "SET_PRIORITY", payload: { kv: val, ut: state.utSelected, bonus: PRIORITY_KV[val] + PRIORITY_UT[state.utSelected] } });
                   }}
                 >
@@ -158,6 +159,7 @@ export function ScoreInputStep({ state, dispatch }: ScoreInputStepProps) {
                 <Select 
                   value={state.utSelected} 
                   onValueChange={(val) => {
+                    if (!val) return;
                     dispatch({ type: "SET_PRIORITY", payload: { kv: state.kvSelected, ut: val, bonus: PRIORITY_KV[state.kvSelected] + PRIORITY_UT[val] } });
                   }}
                 >
