@@ -15,6 +15,7 @@ numpy>=1.26.0
 # --- Utilities ---
 python-dotenv>=1.2.2
 requests>=2.31.0
+tenacity>=8.2.0
 
 # --- Dev / Testing ---
 pytest>=9.0.3
