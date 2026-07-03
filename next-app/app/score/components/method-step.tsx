@@ -156,7 +156,7 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Số lượng trường gợi ý</label>
-                <Select value={String(state.topK)} onValueChange={(v) => dispatch({ type: "SET_FILTERS", payload: { topK: parseInt(v) } })}>
+                <Select value={String(state.topK)} onValueChange={(v) => dispatch({ type: "SET_FILTERS", payload: { topK: parseInt(v || "5") } })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
