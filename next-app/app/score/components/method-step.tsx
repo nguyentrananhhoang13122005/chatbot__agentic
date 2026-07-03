@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
 import { apiClient } from "@/lib/api-client";
 import { CombinationResult } from "@/types";
@@ -21,21 +21,26 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Serialize scores to a stable string key to avoid re-fetch on every reference change
+  const scoresKey = useMemo(() => {
+    // Only include entries with defined values
+    const clean: Record<string, number> = {};
+    Object.entries(state.scores).forEach(([k, v]) => {
+      if (v !== undefined) clean[k] = v;
+    });
+    return JSON.stringify(clean);
+  }, [state.scores]);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    // Fetch combinations when step 2 mounts
+    // Fetch combinations when step 2 mounts, debounced by 300ms
     const fetchCombos = async () => {
       try {
         setLoading(true);
-        // Clean scores: remove undefined
-        const cleanScores: Record<string, number> = {};
-        Object.entries(state.scores).forEach(([k, v]) => {
-          if (v !== undefined) cleanScores[k] = v;
-        });
+        setError(null);
+        const cleanScores: Record<string, number> = JSON.parse(scoresKey);
 
-        // Add IELTS converted if present
-        // In real app, we might need a mapping function, but for now we send what we have or rely on backend
-        // Actually, backend expects "Điểm Quy Đổi IELTS" or something if we want it. We just pass `scores` dict.
-        
         const res = await apiClient.calculateScore({
           scores: cleanScores,
           bonus: state.bonus,
@@ -50,8 +55,14 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
       }
     };
 
-    fetchCombos();
-  }, [state.scores, state.bonus]);
+    // Clear previous debounce timer and set a new one
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(fetchCombos, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [scoresKey, state.bonus]);
 
   const handleStartAnalysis = async () => {
     dispatch({ type: "SET_LOADING", payload: true });
