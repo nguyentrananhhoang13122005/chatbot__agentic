@@ -9,8 +9,6 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      # Mount thư mục model của EasyOCR ra ngoài để tránh tải lại model mỗi lần container khởi động lại
-      - easyocr_models:/root/.EasyOCR
     env_file:
       - .env
     restart: unless-stopped
@@ -19,6 +17,3 @@ services:
       resources:
         limits:
           memory: 1.5G
-
-volumes:
-  easyocr_models:

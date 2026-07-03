@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
 import { fetchSSE } from "@/lib/sse-client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 // Dashboard Components
@@ -20,14 +20,22 @@ interface ResultStepProps {
 
 export function ResultStep({ state, dispatch }: ResultStepProps) {
   const hasFetched = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (hasFetched.current || !state.isLoading) return;
     hasFetched.current = true;
 
+    // Abort any previous in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const runMatch = async () => {
-      // Clear previous analysis
+      // Clear previous state
+      setFetchError(null);
       dispatch({ type: "SET_RESULT", payload: { schools: [], top_combinations: [], strength: {}, warnings: [], analysis: "" } });
       dispatch({ type: "SET_LOADING", payload: true });
 
@@ -36,14 +44,23 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         if (v !== undefined) cleanScores[k] = v;
       });
 
-      const body = {
+      const body: Record<string, unknown> = {
         scores: cleanScores,
         bonus: state.bonus,
         methods: state.methods,
         k: state.topK,
         province: state.filterProvince,
         major: state.filterMajor,
-        stream: true
+        stream: true,
+        // Extra fields (HIGH-3 fix)
+        ielts: state.ielts || undefined,
+        toefl: state.toefl || undefined,
+        toeic: state.toeic || undefined,
+        gpa12: state.gpa12 || undefined,
+        rank12: state.rank12 || undefined,
+        not_taken_subjects: Object.entries(state.notTakenSubjects)
+          .filter(([, v]) => v)
+          .map(([k]) => k),
       };
 
       await fetchSSE("/api/v1/schools/match", body, {
@@ -66,17 +83,28 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           dispatch({ type: "SET_LOADING", payload: false });
         },
         onError: (err) => {
-          console.error("Match error:", err);
+          // Defensive: sse-client.ts already silences AbortError, but this
+          // guard protects against future refactors removing that check.
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          const message = err instanceof Error ? err.message : "Lỗi kết nối";
+          setFetchError(`Không thể phân tích: ${message}. Vui lòng thử lại.`);
           dispatch({ type: "SET_LOADING", payload: false });
         }
-      });
+      }, controller.signal);
     };
 
     runMatch();
-  }, [state.isLoading, dispatch, state.scores, state.bonus, state.methods, state.topK, state.filterProvince, state.filterMajor]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [state.isLoading, dispatch, state.scores, state.bonus, state.methods, state.topK, state.filterProvince, state.filterMajor, state.ielts, state.toefl, state.toeic, state.gpa12, state.rank12, state.notTakenSubjects]);
 
   const handleReRun = () => {
+    // Abort any in-flight stream before starting a new one
+    abortRef.current?.abort();
     hasFetched.current = false;
+    setFetchError(null);
     dispatch({ type: "SET_LOADING", payload: true });
   };
 
@@ -103,6 +131,14 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           </Button>
         </div>
       </div>
+
+      {/* Error Banner (HIGH-4 fix) */}
+      {fetchError && (
+        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <p>{fetchError}</p>
+        </div>
+      )}
 
       {/* Dashboard Composition */}
       <div className="space-y-8">

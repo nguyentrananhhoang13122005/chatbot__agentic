@@ -40,7 +40,9 @@ export function StrengthAnalysis({ strength }: StrengthAnalysisProps) {
           </div>
           <div className="text-sm text-muted-foreground mb-1">Môn Thế Mạnh</div>
           <div className="text-lg font-bold truncate w-full">
-            {strength.best_subjects?.join(", ") || "-"}
+            {Array.isArray(strength.best_subjects)
+              ? strength.best_subjects.map((s: string | [string, number]) => Array.isArray(s) ? s[0] : s).join(", ")
+              : "-"}
           </div>
         </CardContent>
       </Card>
