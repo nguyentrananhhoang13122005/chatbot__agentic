@@ -98,3 +98,7 @@ ehthumbs.db
 Thumbs.db
 docs/caithien.md
 docs/plans/planprompt.md
+
+# === SUBMODULES / CLONED REPOS ===
+codegraph/
+.codegraph/
