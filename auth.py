@@ -2,40 +2,33 @@ import os
 import re
 from urllib.parse import urlencode
 import time
-import streamlit as st
 
 import requests
 from dotenv import load_dotenv
 
-from auth_db import get_user_by_email, init_auth_db, create_user, update_last_login, upsert_google_user, normalize_email
+from auth_db import (
+    get_user_by_email,
+    init_auth_db,
+    create_user,
+    update_last_login,
+    upsert_google_user,
+    normalize_email,
+    store_oauth_state_db,
+    consume_oauth_state_db
+)
 
 load_dotenv(override=True)
 
-# ── Module-level OAuth state store ──────────────────────────────
-# st.session_state is tied to the WebSocket; when the browser
-# navigates away (Google OAuth redirect) the socket disconnects
-# and the session may be lost.  A module-level dict survives
-# across Streamlit sessions inside the same server process.
+# We now use SQLite (auth_db) to store OAuth state to support multi-worker environments
 _OAUTH_TTL = 600                        # 10 minutes
 
-@st.cache_resource
-def _get_oauth_store() -> dict:
-    """Shared dict that survives Streamlit reruns."""
-    return {}
+def store_oauth_state(state: str):
+    init_auth_db()
+    store_oauth_state_db(state, _OAUTH_TTL)
 
-def _store_oauth_state(state: str):
-    store = _get_oauth_store()
-    store[state] = time.time()
-    cutoff = time.time() - _OAUTH_TTL
-    for k in [k for k, v in store.items() if v < cutoff]:
-        store.pop(k, None)
-
-def _consume_oauth_state(state: str) -> bool:
-    store = _get_oauth_store()
-    if state and state in store:
-        ts = store.pop(state)
-        return (time.time() - ts) < _OAUTH_TTL
-    return False
+def consume_oauth_state(state: str) -> bool:
+    init_auth_db()
+    return consume_oauth_state_db(state, _OAUTH_TTL)
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -59,7 +52,7 @@ def _sanitize_user(user: dict | None) -> dict | None:
 
 def get_google_auth_url(state: str | None = None) -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/auth/callback")
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -80,7 +73,7 @@ def exchange_code_for_token(code: str) -> str:
             "code": code,
             "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
             "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
-            "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501"),
+            "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/auth/callback"),
             "grant_type": "authorization_code",
         },
         timeout=10,
@@ -187,20 +180,6 @@ def handle_google_callback(code: str) -> dict | None:
         return None
 
 
-def get_current_user() -> dict | None:
-    import streamlit as st
-
-    return st.session_state.get("user")
-
-
-def is_logged_in() -> bool:
-    return get_current_user() is not None
-
-
-def logout():
-    import streamlit as st
-
-    st.session_state.pop("user", None)
 
 
 def change_password(user_id: str, current_password: str, new_password: str) -> tuple[bool, str | None]:

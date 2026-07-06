@@ -24,3 +24,7 @@ pytest-cov>=5.0.0
 # --- Security (CI) ---
 bandit>=1.9.4
 pip-audit>=2.7.0
+
+# --- Auth ---
+PyJWT>=2.8.0
+bcrypt>=4.1.2

@@ -260,17 +260,17 @@ class TestSaveSessionOwnerSafety:
 class TestOAuthStateStore:
     def test_store_and_consume_state(self, auth_modules):
         _, auth, _ = auth_modules
-        auth._store_oauth_state("test-state-123")
-        assert auth._consume_oauth_state("test-state-123") is True
-        assert auth._consume_oauth_state("test-state-123") is False
+        auth.store_oauth_state("test-state-123")
+        assert auth.consume_oauth_state("test-state-123") is True
+        assert auth.consume_oauth_state("test-state-123") is False
 
     def test_consume_expired_state(self, auth_modules, monkeypatch):
         _, auth, _ = auth_modules
-        auth._store_oauth_state("expired-state")
         import time
-        orig_time = time.time
-        monkeypatch.setattr(time, "time", lambda: orig_time() + 601)
-        assert auth._consume_oauth_state("expired-state") is False
+        auth.store_oauth_state("expired-state")
+        current_time = time.time()
+        monkeypatch.setattr("time.time", lambda: current_time + 601)
+        assert auth.consume_oauth_state("expired-state") is False
 
 class TestGoogleAPI:
     def test_exchange_code_for_token_success(self, auth_modules, monkeypatch):
@@ -294,20 +294,7 @@ class TestGoogleAPI:
         assert info["name"] == "Test User"
         assert info["picture"] == "pic.png"
 
-class TestStreamlitContext:
-    def test_streamlit_session_state(self, auth_modules, monkeypatch):
-        _, auth, _ = auth_modules
-        class MockSessionState(dict): pass
-        mock_state = MockSessionState()
-        mock_state["user"] = {"email": "test@local.com"}
-        monkeypatch.setattr(auth.st, "session_state", mock_state)
-        
-        assert auth.get_current_user() == {"email": "test@local.com"}
-        assert auth.is_logged_in() is True
-        
-        auth.logout()
-        assert auth.get_current_user() is None
-        assert auth.is_logged_in() is False
+
 
 class TestAuthEdgeCases:
     def test_sanitize_user_none(self, auth_modules):

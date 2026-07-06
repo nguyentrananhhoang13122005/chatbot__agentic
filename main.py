@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from api.routers.score import router as scores_router
 from api.routers.schools import router as schools_router
+from api.routers.auth import router as auth_router
 
 app = FastAPI(
     title="UniSearch AI API",
@@ -13,7 +14,7 @@ app = FastAPI(
 # Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Trong production nên giới hạn origin
+    allow_origins=["http://localhost:3000"],  # Bắt buộc khai báo origin cụ thể khi dùng credentials=True
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,6 +23,7 @@ app.add_middleware(
 # Đăng ký các router
 app.include_router(scores_router, prefix="/api/v1/scores", tags=["Scores"])
 app.include_router(schools_router, prefix="/api/v1/schools", tags=["Schools"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 
 @app.get("/health")
 def health_check():

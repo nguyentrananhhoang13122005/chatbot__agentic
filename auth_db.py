@@ -46,8 +46,41 @@ def init_auth_db():
             last_login    TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS oauth_states (
+            state TEXT PRIMARY KEY,
+            created_at REAL NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
+
+def store_oauth_state_db(state: str, ttl: int):
+    import time
+    now = time.time()
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO oauth_states (state, created_at) VALUES (?, ?)",
+        (state, now)
+    )
+    # Cleanup expired
+    conn.execute("DELETE FROM oauth_states WHERE created_at < ?", (now - ttl,))
+    conn.commit()
+    conn.close()
+
+def consume_oauth_state_db(state: str, ttl: int) -> bool:
+    import time
+    now = time.time()
+    conn = _get_conn()
+    row = conn.execute("SELECT created_at FROM oauth_states WHERE state = ?", (state,)).fetchone()
+    if row:
+        conn.execute("DELETE FROM oauth_states WHERE state = ?", (state,))
+        conn.commit()
+        conn.close()
+        created_at = row["created_at"]
+        return (now - created_at) < ttl
+    conn.close()
+    return False
 
 
 def create_user(email: str, display_name: str, avatar_url: str = "", auth_provider: str = "email", password_hash: str = "") -> dict:

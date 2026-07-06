@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
+import { AuthProvider } from "@/contexts/auth-context";
 import "./globals.css";
 
 const inter = Inter({
@@ -36,13 +37,15 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="unisearch-theme"
         >
-          <TooltipProvider delay={300}>
-            <Navbar />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
-          </TooltipProvider>
+          <AuthProvider>
+            <TooltipProvider delay={300}>
+              <Navbar />
+              <main className="flex-1">
+                {children}
+              </main>
+              <Footer />
+            </TooltipProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
