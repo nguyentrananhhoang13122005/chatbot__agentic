@@ -14,6 +14,7 @@ class MatchRequest(BaseModel):
     province: Optional[str] = Field(None, description="Lọc theo Tỉnh/Thành phố")
     major: Optional[str] = Field(None, description="Lọc theo Ngành học")
     stream: bool = Field(False, description="Trả về StreamingResponse (true) hay JSON tĩnh (false)")
+    skip_analysis: bool = Field(False, description="Bỏ qua gọi LLM để trả về ngay kết quả matching")
     # Extra fields — forwarded for future pipeline use
     ielts: Optional[float] = Field(None, description="Điểm IELTS")
     toefl: Optional[int] = Field(None, description="Điểm TOEFL iBT")

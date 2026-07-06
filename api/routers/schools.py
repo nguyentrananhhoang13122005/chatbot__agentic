@@ -112,13 +112,14 @@ async def match_schools(request: MatchRequest, user: Optional[dict] = Depends(ge
                 "strength": strength,
                 "warnings": match_result.get("warnings", [])
             }
-            yield f"data: {json.dumps(init_data, ensure_ascii=False)}\n\n"
+            print("DEBUG META:", json.dumps(init_data, ensure_ascii=False)); yield f"data: {json.dumps(init_data, ensure_ascii=False)}\n\n"
 
             # Send LLM chunks
-            for chunk in generate_analysis_stream(match_result):
-                if chunk:
-                    chunk_data = {"type": "chunk", "content": chunk}
-                    yield f"data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
+            if not request.skip_analysis:
+                for chunk in generate_analysis_stream(match_result):
+                    if chunk:
+                        chunk_data = {"type": "chunk", "content": chunk}
+                        yield f"data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
 
             yield "data: [DONE]\n\n"
 
@@ -171,3 +172,4 @@ async def recommend_schools(request: RecommendRequest, user: Optional[dict] = De
             pre_extracted_year=request.pre_extracted_year
         )
         return RecommendResponse(answer=answer)
+

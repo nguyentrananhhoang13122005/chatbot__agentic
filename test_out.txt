@@ -1,0 +1,4 @@
+data: {"type": "meta", "schools": [], "top_combinations": [], "strength": {"avg_score": 7.8, "trend": "Tự nhiên", "best_subjects": ["Toán", "Hóa học", "Vật lí"], "subjects_count": 3}, "warnings": ["⚠️ Không tìm thấy ngành phù hợp sau khi kiểm tra điều kiện tuyển sinh."]}
+
+data: [DONE]
+

@@ -1,14 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sparkles, AlertTriangle, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 
 interface AIAnalysisPanelProps {
   analysis: string;
   warnings: string[];
   isLoading: boolean;
+  isAnalyzing?: boolean;
+  analysisTriggered?: boolean;
+  onStartAnalysis?: () => void;
 }
 
-export function AIAnalysisPanel({ analysis, warnings, isLoading }: AIAnalysisPanelProps) {
+export function AIAnalysisPanel({ analysis, warnings, isLoading, isAnalyzing, analysisTriggered, onStartAnalysis }: AIAnalysisPanelProps) {
   return (
     <div className="space-y-4">
       {warnings && warnings.length > 0 && (
@@ -35,8 +40,18 @@ export function AIAnalysisPanel({ analysis, warnings, isLoading }: AIAnalysisPan
           </CardTitle>
         </CardHeader>
         
-        <CardContent className="p-6 prose prose-sm md:prose-base dark:prose-invert max-w-none text-muted-foreground">
-          {!analysis && isLoading ? (
+        <CardContent className="p-6 prose prose-sm md:prose-base dark:prose-invert max-w-none text-muted-foreground max-h-[600px] overflow-y-auto custom-scrollbar">
+          {!analysisTriggered ? (
+            <div className="flex flex-col items-center justify-center h-48 space-y-4 text-center">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+                <Bot className="w-8 h-8 text-primary" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Bạn có muốn xem phân tích chuyên sâu về lợi thế của bạn?</p>
+              <Button onClick={onStartAnalysis} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Sparkles className="w-4 h-4 mr-2" /> Nhận phân tích chuyên sâu từ AI
+              </Button>
+            </div>
+          ) : (!analysis && isAnalyzing) ? (
             <div className="flex flex-col items-center justify-center h-48 space-y-4 text-muted-foreground/70">
               <div className="relative">
                 <div className="w-12 h-12 rounded-full border-2 border-primary/20" />
@@ -46,9 +61,9 @@ export function AIAnalysisPanel({ analysis, warnings, isLoading }: AIAnalysisPan
               <p className="text-sm font-medium animate-pulse">Đang phân tích điểm mạnh yếu của bạn...</p>
             </div>
           ) : (
-            <div className="leading-relaxed">
-              <ReactMarkdown>{analysis}</ReactMarkdown>
-              {isLoading && analysis && (
+            <div className="leading-relaxed whitespace-pre-wrap">
+              <ReactMarkdown remarkPlugins={[remarkBreaks]}>{analysis}</ReactMarkdown>
+              {isAnalyzing && (
                 <span className="inline-block w-2 h-4 ml-1 bg-primary animate-pulse" />
               )}
             </div>

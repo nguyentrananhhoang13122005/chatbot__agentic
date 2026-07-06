@@ -33,6 +33,8 @@ export interface ScoreState {
   result?: SchoolMatchResult;
   aiAnalysis: string; // Streaming or completed analysis
   isLoading: boolean;
+  isAnalyzing: boolean;
+  analysisTriggered: boolean;
 }
 
 export type ScoreAction =
@@ -46,6 +48,8 @@ export type ScoreAction =
   | { type: "SET_RESULT"; payload: SchoolMatchResult }
   | { type: "APPEND_ANALYSIS"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
+  | { type: "SET_ANALYZING"; payload: boolean }
+  | { type: "SET_ANALYSIS_TRIGGERED"; payload: boolean }
   | { type: "RESET" };
 
 const initialState: ScoreState = {
@@ -60,6 +64,8 @@ const initialState: ScoreState = {
   topK: 15,
   aiAnalysis: "",
   isLoading: false,
+  isAnalyzing: false,
+  analysisTriggered: false,
 };
 
 function scoreReducer(state: ScoreState, action: ScoreAction): ScoreState {
@@ -98,6 +104,10 @@ function scoreReducer(state: ScoreState, action: ScoreAction): ScoreState {
       return { ...state, aiAnalysis: state.aiAnalysis + action.payload };
     case "SET_LOADING":
       return { ...state, isLoading: action.payload };
+    case "SET_ANALYZING":
+      return { ...state, isAnalyzing: action.payload };
+    case "SET_ANALYSIS_TRIGGERED":
+      return { ...state, analysisTriggered: action.payload };
     case "RESET":
       return initialState;
     default:

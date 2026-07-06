@@ -19,14 +19,12 @@ interface ResultStepProps {
 }
 
 export function ResultStep({ state, dispatch }: ResultStepProps) {
-  const hasFetched = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (hasFetched.current || !state.isLoading) return;
-    hasFetched.current = true;
+    if (!state.isLoading) return;
 
     // Abort any previous in-flight request
     abortRef.current?.abort();
@@ -52,13 +50,14 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         province: state.filterProvince,
         major: state.filterMajor,
         stream: true,
+        skip_analysis: true,
         // Extra fields (HIGH-3 fix)
         ielts: state.ielts || undefined,
         toefl: state.toefl || undefined,
         toeic: state.toeic || undefined,
         gpa12: state.gpa12 || undefined,
         rank12: state.rank12 || undefined,
-        not_taken_subjects: Object.entries(state.notTakenSubjects)
+        not_taken_subjects: Object.entries(state.notTakenSubjects || {})
           .filter(([, v]) => v)
           .map(([k]) => k),
       };
@@ -103,9 +102,63 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
   const handleReRun = () => {
     // Abort any in-flight stream before starting a new one
     abortRef.current?.abort();
-    hasFetched.current = false;
     setFetchError(null);
     dispatch({ type: "SET_LOADING", payload: true });
+    dispatch({ type: "SET_ANALYSIS_TRIGGERED", payload: false });
+    dispatch({ type: "SET_ANALYZING", payload: false });
+  };
+
+  const handleStartAnalysis = async () => {
+    if (state.analysisTriggered) return;
+    dispatch({ type: "SET_ANALYSIS_TRIGGERED", payload: true });
+    dispatch({ type: "SET_ANALYZING", payload: true });
+    
+    // Abort any previous in-flight request just in case
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const cleanScores: Record<string, number> = {};
+    Object.entries(state.scores).forEach(([k, v]) => {
+      if (v !== undefined) cleanScores[k] = v;
+    });
+
+    const body: Record<string, unknown> = {
+      scores: cleanScores,
+      bonus: state.bonus,
+      methods: state.methods,
+      k: state.topK,
+      province: state.filterProvince,
+      major: state.filterMajor,
+      stream: true,
+      skip_analysis: false,
+      ielts: state.ielts || undefined,
+      toefl: state.toefl || undefined,
+      toeic: state.toeic || undefined,
+      gpa12: state.gpa12 || undefined,
+      rank12: state.rank12 || undefined,
+      not_taken_subjects: Object.entries(state.notTakenSubjects || {})
+        .filter(([, v]) => v)
+        .map(([k]) => k),
+    };
+
+    await fetchSSE("/api/v1/schools/match", body, {
+      onMeta: () => {
+        // Skip updating meta again to avoid flickering, data is identical
+      },
+      onChunk: (chunk) => {
+        dispatch({ type: "APPEND_ANALYSIS", payload: chunk });
+      },
+      onDone: () => {
+        dispatch({ type: "SET_ANALYZING", payload: false });
+      },
+      onError: (err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        const message = err instanceof Error ? err.message : "Lỗi kết nối";
+        setFetchError(`Không thể phân tích: ${message}. Vui lòng thử lại.`);
+        dispatch({ type: "SET_ANALYZING", payload: false });
+      }
+    }, controller.signal);
   };
 
   const schools = state.result?.schools || [];
@@ -160,6 +213,9 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
               analysis={state.aiAnalysis} 
               warnings={warnings} 
               isLoading={state.isLoading} 
+              isAnalyzing={state.isAnalyzing}
+              analysisTriggered={state.analysisTriggered}
+              onStartAnalysis={handleStartAnalysis}
             />
           </div>
         </div>
