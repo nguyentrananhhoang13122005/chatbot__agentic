@@ -23,6 +23,7 @@ export async function fetchSSE(
       },
       body: JSON.stringify(body),
       signal,
+      credentials: "include",
     });
 
     if (!res.ok) {

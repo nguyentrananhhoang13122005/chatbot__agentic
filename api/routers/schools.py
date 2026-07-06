@@ -1,13 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from api.schemas.school_schema import MatchRequest, RecommendRequest, SchoolMatchResult, RecommendResponse
-from agents.match_maker import find_top_k_schools, build_analysis_prompt, generate_analysis_stream
+from agents.match_maker import find_top_k_schools, generate_analysis_stream
 from agents.recommender import query_diem_chuan, query_diem_chuan_stream
 import pandas as pd
 import json
 import math
+import logging
+from typing import Optional
+from chat_db import save_searched_university
+from api.routers.auth import get_current_user_optional
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +61,21 @@ def _sanitize_nan(records: list[dict]) -> list[dict]:
     return records
 
 
+def _remember_school_search(user: Optional[dict], request: RecommendRequest) -> None:
+    """Persist searched school history for authenticated users only."""
+    if not user:
+        return
+    school_name = (request.pre_extracted_school or "").strip()
+    if not school_name or school_name.upper() == "ALL":
+        return
+    try:
+        save_searched_university(user["id"], school_name, query_text=request.user_query)
+    except Exception:
+        logger.exception("Failed to save searched university history")
+
+
 @router.post("/match", response_model=SchoolMatchResult)
-async def match_schools(request: MatchRequest):
+async def match_schools(request: MatchRequest, user: Optional[dict] = Depends(get_current_user_optional)):
     """
     Tìm kiếm và gợi ý trường/ngành dựa trên điểm số người dùng.
     Hỗ trợ trả về JSON hoặc SSE Stream.
@@ -122,11 +140,13 @@ async def match_schools(request: MatchRequest):
         )
 
 @router.post("/recommend", response_model=RecommendResponse)
-async def recommend_schools(request: RecommendRequest):
+async def recommend_schools(request: RecommendRequest, user: Optional[dict] = Depends(get_current_user_optional)):
     """
     Tra cứu điểm chuẩn và gợi ý trường qua Chat (Recommender Agent).
     Hỗ trợ trả về JSON hoặc SSE Stream.
     """
+    _remember_school_search(user, request)
+
     if request.stream:
         def recommender_sse_generator():
             response_generator = query_diem_chuan_stream(
