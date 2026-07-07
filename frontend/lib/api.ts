@@ -13,21 +13,16 @@ export class ApiError extends Error {
 }
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...options.headers,
   };
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      credentials: "include", // Use HttpOnly Cookies
     });
 
     const isJson = response.headers.get("content-type")?.includes("application/json");

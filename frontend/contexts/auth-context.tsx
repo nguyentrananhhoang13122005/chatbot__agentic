@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api";
 
 export interface User {
   id: string;
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshMe = useCallback(async () => {
     try {
-      const data = await apiClient.getMe();
+      const data = await apiClient.get<{ user: User }>("/auth/me");
       if (data && data.user) {
         setUser(data.user);
       } else {
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     void apiClient
-      .getMe()
+      .get<{ user: User }>("/auth/me")
       .then((data) => {
         if (!isMounted) return;
         setUser(data?.user ?? null);
@@ -68,17 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (data: Record<string, string>) => {
-    await apiClient.login(data);
+    await apiClient.post("/auth/login", data);
     await refreshMe();
   }, [refreshMe]);
 
   const register = useCallback(async (data: Record<string, string>) => {
-    await apiClient.register(data);
+    await apiClient.post("/auth/register", data);
     await refreshMe();
   }, [refreshMe]);
 
   const logout = useCallback(async () => {
-    await apiClient.logout();
+    await apiClient.post("/auth/logout");
     setUser(null);
   }, []);
 

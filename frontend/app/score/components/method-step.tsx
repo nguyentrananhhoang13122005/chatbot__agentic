@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
-import { apiClient } from "@/lib/api-client";
+import { useApi } from "@/hooks/useApi";
+import { apiClient } from "@/lib/api";
 import { CombinationResult } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,12 @@ interface MethodStepProps {
 }
 
 export function MethodStep({ state, dispatch }: MethodStepProps) {
-  const [combos, setCombos] = useState<CombinationResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading: loading, error, execute: fetchCombosApi } = useApi(
+    (body: any) => apiClient.post<{ top_combinations: CombinationResult[] }>("/scores/calculate", body),
+    { showErrorToast: false }
+  );
+
+  const combos = data?.top_combinations || [];
 
   // Serialize scores to a stable string key to avoid re-fetch on every reference change
   const scoresKey = useMemo(() => {
@@ -36,23 +40,13 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
   useEffect(() => {
     // Fetch combinations when step 2 mounts, debounced by 300ms
     const fetchCombos = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const cleanScores: Record<string, number> = JSON.parse(scoresKey);
+      const cleanScores: Record<string, number> = JSON.parse(scoresKey);
 
-        const res = await apiClient.calculateScore({
-          scores: cleanScores,
-          bonus: state.bonus,
-          k: 3 // top 3 combos
-        });
-        
-        setCombos(res.top_combinations);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to calculate combinations");
-      } finally {
-        setLoading(false);
-      }
+      await fetchCombosApi({
+        scores: cleanScores,
+        bonus: state.bonus,
+        k: 3 // top 3 combos
+      });
     };
 
     // Clear previous debounce timer and set a new one
@@ -85,7 +79,7 @@ export function MethodStep({ state, dispatch }: MethodStepProps) {
         ) : error ? (
           <div className="p-6 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl flex items-center gap-3">
             <AlertTriangle className="w-5 h-5" />
-            <p>{error}</p>
+            <p>{error.message}</p>
           </div>
         ) : (
           <div className="grid md:grid-cols-3 gap-4">
