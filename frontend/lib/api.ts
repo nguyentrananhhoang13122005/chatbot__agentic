@@ -1,10 +1,10 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
   public status: number;
-  public data: any;
+  public data: unknown;
 
-  constructor(status: number, message: string, data?: any) {
+  constructor(status: number, message: string, data?: unknown) {
     super(message);
     this.status = status;
     this.data = data;
@@ -42,7 +42,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
 
 export const apiClient = {
   get: <T>(endpoint: string, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "GET" }),
-  post: <T>(endpoint: string, body?: any, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "POST", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(endpoint: string, body?: any, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  post: <T>(endpoint: string, body?: unknown, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(endpoint: string, body?: unknown, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(endpoint: string, options?: RequestInit) => apiFetch<T>(endpoint, { ...options, method: "DELETE" }),
 };

@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 function AuthCallbackContent() {
@@ -35,13 +35,15 @@ function AuthCallbackContent() {
       }
 
       try {
-        await apiClient.fetchWithCredentials("/api/v1/auth/google/callback", {
-          method: "POST",
-          body: JSON.stringify({ code, state }),
+        const response = await apiClient.post<{ status: string, user: unknown }>("/auth/google/callback", {
+          code,
+          state,
         });
-        
-        await refreshMe();
-        router.push("/");
+
+        if (response.status === "success") {
+          await refreshMe();
+          router.push("/");
+        }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Xác thực Google thất bại.";
         setError(errorMessage);

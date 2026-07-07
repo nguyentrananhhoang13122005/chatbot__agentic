@@ -19,7 +19,7 @@ interface MethodStepProps {
 
 export function MethodStep({ state, dispatch }: MethodStepProps) {
   const { data, isLoading: loading, error, execute: fetchCombosApi } = useApi(
-    (body: any) => apiClient.post<{ top_combinations: CombinationResult[] }>("/scores/calculate", body),
+    (body: unknown) => apiClient.post<{ top_combinations: CombinationResult[] }>("/scores/calculate", body),
     { showErrorToast: false }
   );
 

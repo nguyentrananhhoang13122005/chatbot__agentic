@@ -58,7 +58,7 @@ export default function ChatPage() {
     const assistantMsgId = `msg-${++idCounterRef.current}`;
     setMessages([...newMessages, { id: assistantMsgId, role: "assistant", content: "" }]);
 
-    await fetchSSE("/api/v1/schools/recommend", {
+    await fetchSSE("/schools/recommend", {
       user_query: userMessage,
       stream: true,
       pre_extracted_school: "ALL",

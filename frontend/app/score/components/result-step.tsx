@@ -62,7 +62,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           .map(([k]) => k),
       };
 
-      await fetchSSE("/api/v1/schools/match", body, {
+      await fetchSSE("/schools/match", body, {
         onMeta: (meta) => {
           dispatch({ 
             type: "SET_RESULT", 
@@ -142,7 +142,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         .map(([k]) => k),
     };
 
-    await fetchSSE("/api/v1/schools/match", body, {
+    await fetchSSE("/schools/match", body, {
       onMeta: () => {
         // Skip updating meta again to avoid flickering, data is identical
       },

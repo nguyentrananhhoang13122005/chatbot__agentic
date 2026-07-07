@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/api";
 
-export function useApi<T, P extends any[]>(
+export function useApi<T, P extends unknown[]>(
   apiFunc: (...args: P) => Promise<T>,
   options: {
     showSuccessToast?: boolean | string;
