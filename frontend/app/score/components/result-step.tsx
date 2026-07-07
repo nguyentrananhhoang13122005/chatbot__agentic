@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { ScoreState, ScoreAction } from "@/hooks/use-score-form";
 import { fetchSSE } from "@/lib/sse-client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw, AlertTriangle } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertTriangle, Sparkles, GraduationCap, FileText } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 // Dashboard Components
 import { StrengthAnalysis } from "./strength-analysis";
@@ -22,6 +24,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("analysis");
 
   useEffect(() => {
     if (!state.isLoading) return;
@@ -162,7 +165,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
   };
 
   const schools = state.result?.schools || [];
-  const combos = state.result?.top_combinations || [];
+  const combos = (state.result?.top_combinations as Array<{ code: string; subjects: string[]; total: number; below_threshold?: boolean }>) || [];
   const strength = state.result?.strength || {};
   const warnings = state.result?.warnings || [];
 
@@ -193,39 +196,123 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         </div>
       )}
 
-      {/* Dashboard Composition */}
-      <div className="space-y-8">
-        
-        {/* Row 1: Strength Analysis (Metric Cards) */}
-        <div>
-          <h3 className="font-heading text-lg font-semibold mb-4 px-1">Tổng quan Năng lực</h3>
-          <StrengthAnalysis strength={strength} />
+      {/* Custom Tabs Navigation */}
+      <div className="w-full">
+        <div className="flex justify-center mb-10">
+          <div className="flex p-1.5 bg-white/5 border border-white/10 rounded-2xl w-full max-w-md shadow-inner relative z-20">
+            <button
+              onClick={() => setActiveTab("analysis")}
+              className={cn(
+                "flex-1 py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300",
+                activeTab === "analysis" 
+                  ? "bg-primary/20 text-primary shadow-[0_0_15px_rgba(242,55,161,0.2)] border border-primary/30" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent"
+              )}
+            >
+              <FileText className="w-4 h-4" /> Báo cáo & AI
+            </button>
+            <button
+              onClick={() => setActiveTab("schools")}
+              className={cn(
+                "flex-1 py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300",
+                activeTab === "schools" 
+                  ? "bg-primary/20 text-primary shadow-[0_0_15px_rgba(242,55,161,0.2)] border border-primary/30" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent"
+              )}
+            >
+              <GraduationCap className="w-4 h-4" /> Đại học Đề xuất
+            </button>
+          </div>
         </div>
 
-        {/* Row 2: Combos & AI Analysis */}
-        <div className="grid lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 space-y-4">
-            <h3 className="font-heading text-lg font-semibold px-1">Tổ hợp môn xét tuyển</h3>
-            <ComboCards combos={combos as Array<{ code: string; subjects: string[]; total: number; below_threshold?: boolean }>} />
-          </div>
-          <div className="lg:col-span-2">
-            <AIAnalysisPanel 
-              analysis={state.aiAnalysis} 
-              warnings={warnings} 
-              isLoading={state.isLoading} 
-              isAnalyzing={state.isAnalyzing}
-              analysisTriggered={state.analysisTriggered}
-              onStartAnalysis={handleStartAnalysis}
-            />
+        {/* Tab 1: Analysis */}
+        <div className={cn(
+          "transition-all duration-500",
+          activeTab === "analysis" ? "opacity-100 block animate-in fade-in zoom-in-95" : "opacity-0 hidden"
+        )}>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative items-start">
+            
+            {/* Main Content Column */}
+            <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-8 min-w-0 w-full overflow-hidden lg:overflow-visible">
+              <div className="order-1">
+                <h3 className="font-heading text-2xl md:text-3xl font-bold tracking-tight mb-5 px-1">Tổng quan Năng lực</h3>
+                <StrengthAnalysis strength={strength} />
+              </div>
+
+              <div className="order-3 space-y-5">
+                <h3 className="font-heading text-2xl md:text-3xl font-bold tracking-tight px-1">Tổ hợp xét tuyển</h3>
+                <ComboCards combos={combos} />
+              </div>
+
+              {/* AI Panel on Mobile */}
+              <div className="order-2 block lg:hidden">
+                <AIAnalysisPanel 
+                  analysis={state.aiAnalysis} 
+                  warnings={warnings} 
+                  isLoading={state.isLoading} 
+                  isAnalyzing={state.isAnalyzing}
+                  analysisTriggered={state.analysisTriggered}
+                  onStartAnalysis={handleStartAnalysis}
+                />
+              </div>
+
+              {/* Action Button to Tab 2 */}
+              <div className="order-4 pt-4 flex justify-center lg:justify-start">
+                <Button 
+                  onClick={() => {
+                    setActiveTab("schools");
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }} 
+                  size="lg" 
+                  className="w-full md:w-auto text-base px-8 py-6 rounded-xl bg-gradient-to-r from-primary to-secondary hover:opacity-90 shadow-[0_0_20px_rgba(242,55,161,0.3)] transition-all"
+                >
+                  Xem danh sách Trường phù hợp ➔
+                </Button>
+              </div>
+            </div>
+
+            {/* Sidebar Column (AI Analysis) - Desktop Only */}
+            <div className="hidden lg:block lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6">
+              <AIAnalysisPanel 
+                analysis={state.aiAnalysis} 
+                warnings={warnings} 
+                isLoading={state.isLoading} 
+                isAnalyzing={state.isAnalyzing}
+                analysisTriggered={state.analysisTriggered}
+                onStartAnalysis={handleStartAnalysis}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Row 3: School Table */}
-        <div className="pt-4">
-          <h3 className="font-heading text-lg font-semibold mb-4 px-1">Danh sách Trường phù hợp</h3>
-          <SchoolTable schools={schools} />
+        {/* Tab 2: Schools */}
+        <div className={cn(
+          "transition-all duration-500",
+          activeTab === "schools" ? "opacity-100 block animate-in fade-in zoom-in-95" : "opacity-0 hidden"
+        )}>
+          <div className="max-w-4xl mx-auto">
+            {/* Mini Summary Anchor */}
+            <div className="mb-8 bg-primary/5 border border-primary/20 p-5 rounded-2xl flex items-center justify-between backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Sparkles className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground font-medium uppercase tracking-wider mb-1">Tổ hợp tốt nhất của bạn</div>
+                  <div className="font-bold text-2xl text-foreground font-heading">
+                    <span className="text-primary mr-2">{combos[0]?.code || "N/A"}</span> 
+                    {combos[0]?.total.toFixed(2) || "0.00"} điểm
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="pt-2">
+              <h3 className="font-heading text-2xl md:text-3xl font-bold tracking-tight mb-5 px-1">Đại học đề xuất</h3>
+              <SchoolTable schools={schools} />
+            </div>
+          </div>
         </div>
-        
       </div>
     </div>
   );

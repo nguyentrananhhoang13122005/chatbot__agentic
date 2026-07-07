@@ -29,18 +29,20 @@ export function AIAnalysisPanel({ analysis, warnings, isLoading, isAnalyzing, an
         </Card>
       )}
 
-      <Card className="bg-gradient-to-br from-white/5 to-white/0 border-white/10 backdrop-blur-md overflow-hidden relative">
-        {/* Glow effect */}
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-primary/20 rounded-full blur-[40px] pointer-events-none" />
+      <Card className="bg-background/40 border-white/10 backdrop-blur-3xl overflow-hidden relative shadow-2xl ring-1 ring-white/5">
+        {/* Subtle ambient glows */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-40 h-40 bg-primary/20 rounded-full blur-[50px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 bg-secondary/10 rounded-full blur-[50px] pointer-events-none" />
         
-        <CardHeader className="p-5 pb-2 border-b border-white/5">
-          <CardTitle className="font-heading text-lg font-semibold flex items-center gap-2 text-foreground">
+        <CardHeader className="p-6 pb-4 border-b border-white/5 relative z-10">
+          <CardTitle className="font-heading text-xl font-bold flex items-center gap-2 tracking-tight text-foreground">
             <Sparkles className="w-5 h-5 text-primary" />
             Nhận xét từ UniSearch AI
           </CardTitle>
         </CardHeader>
         
-        <CardContent className="p-6 prose prose-sm md:prose-base dark:prose-invert max-w-none text-muted-foreground max-h-[600px] overflow-y-auto custom-scrollbar">
+        <CardContent className="p-6 prose prose-sm md:prose-base dark:prose-invert max-w-none text-muted-foreground max-h-[calc(100vh-250px)] lg:max-h-[800px] overflow-y-auto custom-scrollbar">
           {!analysisTriggered ? (
             <div className="flex flex-col items-center justify-center h-48 space-y-4 text-center">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">

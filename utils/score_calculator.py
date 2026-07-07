@@ -59,10 +59,10 @@ COMBINATIONS: dict[str, list[str]] = {
     "C07": ["Ngữ văn", "Hóa học", "Sinh học"],
     "C08": ["Ngữ văn", "Hóa học", "Lịch sử"],
     "C09": ["Ngữ văn", "Vật lý", "Lịch sử"],
-    "C10": ["Ngữ văn", "Vật lý", "Tiếng Anh"],
+    "C10": ["Ngữ văn", "Hóa học", "Lịch sử"],
     "C11": ["Ngữ văn", "Hóa học", "Địa lý"],
     "C12": ["Ngữ văn", "Sinh học", "Lịch sử"],
-    "C13": ["Ngữ văn", "Sinh học", "Lịch sử"],
+    "C13": ["Ngữ văn", "Sinh học", "Địa lý"],
     "C14": ["Ngữ văn", "Toán", "GDCD"],
     "C15": ["Ngữ văn", "Toán", "Khoa học xã hội"],
     "C16": ["Ngữ văn", "Vật lý", "GDCD"],
@@ -389,7 +389,7 @@ def calculate_all_combinations(scores: dict, bonus: float = 0.0) -> list[dict]:
             ...
         ]
     """
-    results = []
+    grouped_results = {}
     for code, subjects in COMBINATIONS.items():
         # Kiểm tra xem có đủ điểm cho tổ hợp này không
         subject_scores = []
@@ -404,6 +404,11 @@ def calculate_all_combinations(scores: dict, bonus: float = 0.0) -> list[dict]:
         if not has_all:
             continue
 
+        subj_key = tuple(sorted(subjects))
+        if subj_key in grouped_results:
+            grouped_results[subj_key]["code"] += f", {code}"
+            continue
+
         raw_total = round(sum(subject_scores), 2)
         # Tìm môn điểm thấp nhất và cao nhất trong tổ hợp để chuẩn bị cho Thang 40 (Min-Max Range)
         min_sub = min(subject_scores)
@@ -416,7 +421,7 @@ def calculate_all_combinations(scores: dict, bonus: float = 0.0) -> list[dict]:
         adjusted_bonus = calculate_adjusted_bonus(raw_total, bonus)
         total = round(raw_total + adjusted_bonus, 2)
         
-        results.append({
+        grouped_results[subj_key] = {
             "code": code,
             "subjects": subjects,
             "subject_scores": subject_scores,
@@ -428,7 +433,9 @@ def calculate_all_combinations(scores: dict, bonus: float = 0.0) -> list[dict]:
             "total": total,
             "has_diem_liet": has_diem_liet,
             "below_threshold": total < MIN_THRESHOLD or has_diem_liet,
-        })
+        }
+
+    results = list(grouped_results.values())
 
     # Sort descending by total
     results.sort(key=lambda x: x["total"], reverse=True)
