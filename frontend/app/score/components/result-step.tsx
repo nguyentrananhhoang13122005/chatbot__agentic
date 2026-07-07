@@ -62,7 +62,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
           .map(([k]) => k),
       };
 
-      await fetchSSE("/api/v1/schools/match", body, {
+      await fetchSSE("/schools/match", body, {
         onMeta: (meta) => {
           dispatch({ 
             type: "SET_RESULT", 
@@ -142,7 +142,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         .map(([k]) => k),
     };
 
-    await fetchSSE("/api/v1/schools/match", body, {
+    await fetchSSE("/schools/match", body, {
       onMeta: () => {
         // Skip updating meta again to avoid flickering, data is identical
       },
@@ -203,12 +203,12 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
         </div>
 
         {/* Row 2: Combos & AI Analysis */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
+        <div className="grid lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 space-y-4">
             <h3 className="font-heading text-lg font-semibold px-1">Tổ hợp môn xét tuyển</h3>
             <ComboCards combos={combos as Array<{ code: string; subjects: string[]; total: number; below_threshold?: boolean }>} />
           </div>
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-2">
             <AIAnalysisPanel 
               analysis={state.aiAnalysis} 
               warnings={warnings} 

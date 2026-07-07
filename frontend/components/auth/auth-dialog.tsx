@@ -11,7 +11,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 export function AuthDialog({
@@ -76,7 +76,7 @@ export function AuthDialog({
     setIsLoading(true);
     setError("");
     try {
-      const { url } = await apiClient.getGoogleUrl();
+      const { url } = await apiClient.get<{ url: string }>("/auth/google/url");
       if (url) {
         window.location.href = url;
       }
