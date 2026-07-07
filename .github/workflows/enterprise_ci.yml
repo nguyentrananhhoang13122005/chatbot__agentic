@@ -111,7 +111,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
-      - run: npm ci
+      - run: npm install
       - run: npm run lint
       - run: npm run build
 
@@ -140,7 +140,7 @@ jobs:
           FROM node:22-alpine AS builder
           WORKDIR /app
           COPY package*.json ./
-          RUN npm ci
+          RUN npm install
           COPY . .
           RUN npm run build
 
