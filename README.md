@@ -100,6 +100,15 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxxxxxx
 
 ### Bước 6: Chạy ứng dụng
 
+Bạn có thể chạy dự án bằng **Docker** (Khuyên dùng) hoặc chạy thủ công.
+
+#### Tùy chọn A: Chạy bằng Docker Compose (Khuyên dùng)
+Chỉ cần chạy lệnh sau tại thư mục gốc, Docker sẽ tự động build cả Backend và Frontend:
+```bash
+docker-compose up -d --build
+```
+
+#### Tùy chọn B: Chạy thủ công (Development)
 ```bash
 # Terminal 1 — Backend (FastAPI)
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -109,9 +118,9 @@ cd frontend
 npm run dev
 ```
 
-- Backend API: `http://localhost:8000`
-- Frontend: `http://localhost:3000`
-- API Docs: `http://localhost:8000/docs`
+### Các đường dẫn truy cập
+- Frontend UI: `http://localhost:3000`
+- Backend API Docs: `http://localhost:8000/docs`
 
 ---
 

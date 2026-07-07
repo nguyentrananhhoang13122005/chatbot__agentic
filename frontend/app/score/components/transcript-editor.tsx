@@ -74,7 +74,8 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
         </Select>
       </div>
 
-      <div className="rounded-xl border border-border overflow-x-auto">
+      {/* Desktop View */}
+      <div className="hidden md:block rounded-xl border border-border overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs uppercase bg-muted/50 text-muted-foreground">
             <tr>
@@ -136,6 +137,48 @@ export function TranscriptEditor({ dispatch }: TranscriptEditorProps) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile View */}
+      <div className="md:hidden space-y-4">
+        {ALL_SUBJECTS.map((subject) => {
+          const scores = grid[subject] || {};
+          let sum = 0; let count = 0;
+          const semestersToCount = formula === "5HK" ? SEMESTERS.slice(0, 5) : formula === "6HK" ? SEMESTERS : SEMESTERS.slice(4, 6);
+          semestersToCount.forEach(sem => {
+            if (scores[sem] !== undefined) { sum += scores[sem]!; count++; }
+          });
+          const isComplete = count === semestersToCount.length && count > 0;
+          const previewAvg = isComplete ? (sum / count).toFixed(2) : "-";
+
+          return (
+            <div key={subject} className="rounded-xl border border-border p-4 space-y-3 bg-muted/5 shadow-sm">
+              <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                <span className="font-semibold text-foreground">{subject}</span>
+                <span className="text-sm font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md">ĐTB: {previewAvg}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {SEMESTERS.map(sem => {
+                  const isRelevant = 
+                    (formula === "5HK" && sem !== "HK2 L12") ||
+                    (formula === "L12" && (sem === "HK1 L12" || sem === "HK2 L12")) ||
+                    formula === "6HK";
+                  return (
+                    <div key={`${subject}-${sem}`} className={`flex flex-col space-y-1.5 ${!isRelevant ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
+                      <span className="text-[11px] text-center text-muted-foreground font-medium tracking-tight uppercase">{sem}</span>
+                      <ScoreInput
+                        value={scores[sem]}
+                        onChange={(val) => handleScoreChange(subject, sem, val)}
+                        className="h-9 text-center px-1 text-sm bg-background"
+                        disabled={!isRelevant}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

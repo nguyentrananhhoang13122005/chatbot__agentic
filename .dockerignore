@@ -12,7 +12,13 @@ __pycache__/
 *$py.class
 venv/
 env/
+.venv/
 .env
+
+# Frontend / Node (tránh copy nhầm vào backend)
+frontend/
+node_modules/
+.next/
 
 # Data & Logs (Let volumes handle this)
 data/**/*.db

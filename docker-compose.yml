@@ -1,10 +1,10 @@
 
 services:
-  unisearch-app:
+  backend:
     build: 
       context: .
       dockerfile: Dockerfile
-    container_name: unisearch_ai
+    container_name: unisearch_backend
     ports:
       - "8000:8000"
     volumes:
@@ -12,8 +12,20 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    # Giới hạn RAM nếu deploy trên VPS nhỏ để tránh crash do OOM (Out Of Memory)
     deploy:
       resources:
         limits:
           memory: 1.5G
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: unisearch_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    restart: unless-stopped
+    depends_on:
+      - backend
