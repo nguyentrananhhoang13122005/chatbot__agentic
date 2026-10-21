@@ -22,8 +22,9 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "data", "chat_history.db")
 
 def _get_conn() -> sqlite3.Connection:
     """Trả về connection tới SQLite DB. Tự tạo file + thư mục nếu chưa có."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    path = os.getenv("CHAT_DB_PATH") or DB_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -38,7 +39,8 @@ def init_db():
             messages    TEXT NOT NULL DEFAULT '[]',
             bookmarked  INTEGER NOT NULL DEFAULT 0,
             created_at  TEXT NOT NULL,
-            updated_at  TEXT NOT NULL
+            updated_at  TEXT NOT NULL,
+            user_id     TEXT DEFAULT NULL
         )
     """)
     # Migration: thêm cột bookmarked nếu DB cũ chưa có

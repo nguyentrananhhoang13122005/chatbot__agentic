@@ -1,10 +1,13 @@
 from fastapi.testclient import TestClient
 from main import app
 import pytest
+from utils.admission_repository import AdmissionRepository
+import utils.admission_matcher as matcher
 
 client = TestClient(app)
 
-def test_match_schools_endpoint():
+def test_match_schools_endpoint(admission_db, monkeypatch):
+    monkeypatch.setattr(matcher, "AdmissionRepository", lambda: AdmissionRepository(admission_db))
     payload = {
         "scores": {
             "Toán": 8.5,
@@ -14,14 +17,14 @@ def test_match_schools_endpoint():
         "bonus": 0.0,
         "methods": ["Xét điểm thi THPT"],
         "k": 3,
-        "stream": False
+        "stream": False,
+        "skip_analysis": True
     }
     response = client.post("/api/v1/schools/match", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert "schools" in data
     assert "top_combinations" in data
-    assert "analysis" in data
     assert isinstance(data["schools"], list)
     assert len(data["schools"]) > 0
 

@@ -7,8 +7,9 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "data", "chat_history.db")
 
 
 def _get_conn() -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    target_path = os.getenv("AUTH_DB_PATH") or DB_PATH
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    conn = sqlite3.connect(target_path, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -164,10 +165,27 @@ def update_password(user_id: str, new_password_hash: str):
 
 def delete_user_account(user_id: str):
     conn = _get_conn()
-    # Cascade delete messages and searched universities
-    conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
-    conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+    # Cascade delete messages and searched universities in local DB if tables exist
+    try:
+        conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+    except Exception:
+        pass
+    try:
+        conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+    except Exception:
+        pass
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+
+    # Cascade delete in chat_db as well if separate DB is configured
+    try:
+        import chat_db
+        c_conn = chat_db._get_conn()
+        c_conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+        c_conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+        c_conn.commit()
+        c_conn.close()
+    except Exception:
+        pass
 

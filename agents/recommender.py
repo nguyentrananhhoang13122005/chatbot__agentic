@@ -5,6 +5,7 @@ import sys
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
+from utils.school_registry import apply_aliases
 
 # --- KHỞI TẠO DATABASE ---
 # Để tránh OOM và Full Table Scan, giờ ta ưu tiên dùng SQLite thay vì load toàn bộ CSV vào RAM.
@@ -128,6 +129,77 @@ def get_verified_cross_search(code_keywords, text_keywords):
             vf_cross = df_verified[df_verified['Tên ngành'].astype(str).str.contains(pattern, case=False, na=False)]
     return vf_cross
 
+
+def _has_verified_data() -> bool:
+    """Có nguồn điểm chuẩn khả dụng không (SQLite hoặc CSV). df_verified là DataFrame giả khi dùng SQLite nên không được dùng .empty để kiểm tra."""
+    return os.path.exists(DB_PATH) or (df_verified is not None and not df_verified.empty)
+
+
+# ======== HELPER: PHƯƠNG THỨC & THANG ĐIỂM (mỗi trường mỗi khác) ========
+from utils.data_quality import METHOD_GROUP_LABELS
+
+_METHOD_QUERY_HINTS = [
+    ("hoc_ba", r"học bạ"),
+    ("dgnl_hcm", r"(đgnl|đánh giá năng lực|năng lực).{0,12}(hcm|tphcm|sài gòn)|đhqg.{0,6}(hcm|tphcm)"),
+    ("dgnl_hn", r"đgnl|đánh giá năng lực|năng lực"),
+    ("tu_duy", r"tư duy"),
+    ("chung_chi", r"chứng chỉ|ielts|toefl|\bsat\b"),
+    ("ket_hop", r"kết hợp"),
+    ("xt_thang", r"xét tuyển thẳng|ưu tiên xét tuyển"),
+]
+
+
+def _requested_method_group(query: str) -> str:
+    """Người dùng nói phương thức nào? Mặc định là điểm thi tốt nghiệp THPT."""
+    q = (query or "").lower()
+    for group, pattern in _METHOD_QUERY_HINTS:
+        if re.search(pattern, q):
+            return group
+    return "thpt"
+
+
+def _restrict_to_comparable_scale(df: pd.DataFrame, user_query: str):
+    """Chỉ xếp hạng/so sánh trong CÙNG phương thức và CÙNG thang điểm (tránh trộn 30/40/150/1200).
+    Trả về (df_lọc, nhãn_mô_tả). Nếu lọc xong rỗng thì giữ nguyên df."""
+    if df.empty or "method_group" not in df.columns:
+        return df, ""
+    group = _requested_method_group(user_query)
+    sub = df[df["method_group"] == group]
+    if "quality_flag" in sub.columns:
+        sub = sub[sub["quality_flag"] != "SCALE_INFERRED"]
+    scale_note = METHOD_GROUP_LABELS.get(group, group)
+    if group in {"thpt", "hoc_ba"} and "score_scale" in sub.columns and (sub["score_scale"].astype(str) == "30").any():
+        sub = sub[sub["score_scale"].astype(str) == "30"]
+        scale_note += ", thang 30"
+    if sub.empty:
+        return df, ""
+    return sub, scale_note
+
+
+_QUALITY_NOTES = {
+    "SCALE_INFERRED": "thang điểm suy luận từ giá trị, cần đối chiếu thông báo của trường",
+    "RECOVERED_DECIMAL": "đã khôi phục dấu thập phân từ file nguồn",
+    "SCALE_MIXED": "chứng chỉ: thang điểm tùy loại chứng chỉ",
+}
+
+
+def _add_scale_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Thêm cột 'Thang điểm' / 'Lưu ý' để LLM luôn nêu kèm thang khi đưa điểm."""
+    out = df.copy()
+    if "score_scale" in out.columns:
+        out["Thang điểm"] = out["score_scale"].map(
+            lambda s: "không đồng nhất" if s == "mixed" else (f"thang {s}" if s not in ("", None) and not pd.isna(s) else "")
+        )
+    if "quality_flag" in out.columns:
+        out["Lưu ý"] = out["quality_flag"].map(lambda f: _QUALITY_NOTES.get(f, ""))
+    return out
+
+
+_SCALE_RULE = (
+    "Mỗi phương thức có THANG ĐIỂM riêng (cột \"Thang điểm\"). KHÔNG so sánh/xếp hạng điểm giữa các phương thức khác thang; "
+    "luôn ghi kèm phương thức và thang khi nêu điểm. Nếu cột \"Lưu ý\" có nội dung, nhắc người dùng đối chiếu thông báo chính thức của trường."
+)
+
 # ======== HELPER: HYBRID SCHOOL MATCHER (BM25 + Fuzzy + Token Overlap) ========
 import math
 from difflib import SequenceMatcher
@@ -151,7 +223,8 @@ def _normalize_school_name(name: str) -> str:
     name = re.sub(r'\btphcm\b', 'tp hồ chí minh', name)
     name = re.sub(r'\bđhqg\b', 'đại học quốc gia', name)
 
-    return name.strip()
+    # Biến thể tên/viết tắt → dạng chuẩn dùng chung cho mọi nguồn (PTIT ↔ BCVT ...)
+    return apply_aliases(name).strip()
 
 def _tokenize_vn(text: str) -> list:
     """Tách token tiếng Việt, bỏ stopwords ngắn."""
@@ -178,10 +251,12 @@ def _fuzzy_score(query: str, school_name: str) -> float:
     return SequenceMatcher(None, query.lower(), school_name.lower()).ratio()
 
 def _token_overlap_score(query_tokens: list, school_name_lower: str) -> float:
-    """Token overlap score (CẢI TIẾN từ logic cũ): đếm % token query nằm trong tên trường."""
+    """Token overlap score: % token query là MỘT TỪ NGUYÊN VẴN trong tên trường (không khớp chuỗi con:
+    trước đây "chính" khớp nhầm vào "Tài chính")."""
     if not query_tokens:
         return 0.0
-    hits = sum(1 for kw in query_tokens if kw in school_name_lower)
+    school_tokens = set(_tokenize_vn(school_name_lower))
+    hits = sum(1 for kw in query_tokens if kw in school_tokens)
     return hits / len(query_tokens)  # Chuẩn hoá về 0-1
 
 def find_matching_schools(truong_query: str, school_list: list, min_confidence: float = 0.5, strict: bool = False, location: str = "ALL") -> list:
@@ -210,19 +285,21 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
         loc_norm = _normalize_school_name(location)
 
     scored = []
+    raw_bm25 = [_bm25_score(query_tokens, all_doc_tokens[i], avg_dl) for i in range(len(school_list))]
+    max_bm25 = max(raw_bm25) if raw_bm25 else 0.0
     for i, school in enumerate(school_list):
         school_normalized = _normalize_school_name(school)
-        doc_tokens = all_doc_tokens[i]
 
-        s_bm25 = _bm25_score(query_tokens, doc_tokens, avg_dl)
+        # BM25 chuẩn hoá về 0-1 để có cùng thang với fuzzy/token (trước đây cộng thẳng điểm BM25 không giới hạn)
+        s_bm25 = (raw_bm25[i] / max_bm25) if max_bm25 > 0 else 0.0
         s_fuzzy = _fuzzy_score(query_normalized, school_normalized)
         s_token = _token_overlap_score(query_tokens, school_normalized)
         combined = (s_bm25 * 0.4) + (s_fuzzy * 0.3) + (s_token * 0.3)
 
-        # Buff điểm nếu có location và location khớp một phần vào tên trường
+        # Buff nhẹ nếu location khớp một phần vào tên trường (không đủ để lấn át một trường sai tên)
         if loc_norm and loc_norm in school_normalized:
-            combined += 1.0  # Buff cực mạnh để leo lên Top 1
-            print(f"DEBUG [Matcher]: Buffed {school} by 1.0 due to location '{loc_norm}'")
+            combined += 0.3
+            print(f"DEBUG [Matcher]: Buffed {school} by 0.3 due to location '{loc_norm}'")
 
         scored.append((school, combined, s_bm25, s_fuzzy, s_token))
 
@@ -248,10 +325,13 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
     if strict:
         return []
 
-    # Nếu không có full match, lấy top-1 (trường điểm cao nhất)
-    if scored[0][1] >= min_confidence:
-        print(f"DEBUG [Matcher]: Fallback top-1: '{scored[0][0]}' (combined={scored[0][1]:.3f})")
-        return [scored[0][0]]
+    # Nếu không có full match, chỉ lấy top-1 khi nó THỰC SỰ gần (token trùng ≥ 60% hoặc fuzzy ≥ 0.8).
+    # Trước đây ngưỡng 0.5 quá thấp nên "bưu chính viễn thông" bị gán nhầm cho "ĐH Tài chính Marketing".
+    # Thiếu tự tin thì trả rỗng để hệ thống hỏi lại thay vì đoán.
+    top = scored[0]
+    if top[1] >= min_confidence and (top[4] >= 0.6 or top[3] >= 0.8):
+        print(f"DEBUG [Matcher]: Fallback top-1: '{top[0]}' (combined={top[1]:.3f})")
+        return [top[0]]
 
     return []
 
@@ -392,7 +472,7 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
     # ======== BƯỚC 1B: TRA CỨU CHÉO (CROSS-SCHOOL) — Khi truong=ALL + có keyword ========
     # Xử lý câu hỏi dạng "Top 5 trường CNTT", "ngành Y điểm cao nhất", "so sánh ngành kinh tế"
     has_specific_keyword = tu_khoa != "ALL" and not any(m in tu_khoa.lower() for m in ['điểm', 'chuẩn'])
-    if truong == "ALL" and has_specific_keyword and df_verified is not None and not df_verified.empty:
+    if truong == "ALL" and has_specific_keyword and _has_verified_data():
         major_keywords = [kw.strip() for kw in tu_khoa.split('|') if kw.strip()]
         code_keywords = [kw for kw in major_keywords if re.search(r'\d{5,}', kw)]
         text_keywords = [kw for kw in major_keywords if kw not in code_keywords]
@@ -415,6 +495,11 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
                         print(f"DEBUG [Recommender Cross]: Found data for year {try_year}")
                         break
 
+            # Chỉ xếp hạng trong CÙNG phương thức + thang điểm (mặc định: điểm thi THPT thang 30), thêm cột thang điểm
+            vf_cross, scale_label = _restrict_to_comparable_scale(vf_cross, user_query)
+            scale_note_text = f"PHẠM VI XẾP HẠNG: chỉ gồm phương thức {scale_label}." if scale_label else ""
+            vf_cross = _add_scale_columns(vf_cross)
+
             # Bỏ cột trống
             vf_cross = vf_cross.replace('', pd.NA).dropna(axis=1, how='all')
 
@@ -426,13 +511,16 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
                 vf_cross_top = vf_cross.drop_duplicates(subset=['Trường'], keep='first')
                 # Lấy thêm dòng phụ (nhiều ngành) cho top trường
                 top_schools = vf_cross_top.head(30)['Trường'].tolist()
-                vf_cross_detail = vf_cross[vf_cross['Trường'].isin(top_schools)]
-                vf_cross = vf_cross_detail
+                vf_cross_detail = vf_cross[vf_cross['Trường'].isin(top_schools)].copy()
+                # Hạng theo TRƯỜNG (điểm cao nhất của trường): một trường có nhiều dòng (nhóm chỉ tiêu, ngành) vẫn chỉ một hạng
+                school_rank = {school: idx + 1 for idx, school in enumerate(top_schools)}
+                vf_cross_detail['Hạng trường'] = vf_cross_detail['Trường'].map(school_rank)
+                vf_cross = vf_cross_detail.sort_values(['Hạng trường', 'Điểm chuẩn_Num'], ascending=[True, False])
                 vf_cross = vf_cross.drop(columns=['_score'], errors='ignore')
 
             # Giới hạn 150 dòng cho LLM
             data_sample = vf_cross.head(150)
-            export_cols = [c for c in ['Trường','Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn'] if c in data_sample.columns]
+            export_cols = [c for c in ['Hạng trường','Trường','Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Thang điểm','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn','Lưu ý'] if c in data_sample.columns]
             data_context = data_sample[export_cols].to_csv(index=False, encoding='utf-8')
 
             data_year_val = ""
@@ -454,15 +542,17 @@ DỮ LIỆU CHÍNH THỨC — TẤT CẢ TRƯỜNG CÓ NGÀNH LIÊN QUAN (dạng
 {data_context}
 
 TỔNG SỐ DÒNG DỮ LIỆU: {len(vf_cross)} ({vf_cross['Trường'].nunique()} trường)
+{scale_note_text}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa.
 2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. Nếu hỏi "top" hoặc "xếp hạng" → SẮP XẾP theo điểm chuẩn GIẢM DẦN.
+3. Nếu hỏi "top" hoặc "xếp hạng" → xếp theo cột "Hạng trường" (1 là cao nhất). MỖI TRƯỜNG CHỈ XUẤT HIỆN MỘT LẦN trong bảng xếp hạng, lấy điểm cao nhất của trường đó; nếu trường có nhiều nhóm/chỉ tiêu (nam/nữ, miền Bắc/Nam...) thì ghi chú ngắn bên cạnh điểm đó, KHÔNG liệt kê thành nhiều hạng.
 {table_rule_cross}
 5. BẮT BUỘC ghi rõ NĂM dữ liệu.
 6. Sử dụng Markdown cho phần nhận xét, trả lời tiếng Việt chuyên nghiệp.
-7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời."""
+7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời.
+8. {_SCALE_RULE}"""
 
             llm_messages_cross = [{"role": "user", "content": llm_prompt_cross}]
             prefix_cross = f"**[Recommender Agent]** — Tìm kiếm chéo: **{tu_khoa}** · {vf_cross['Trường'].nunique()} trường\n\n"
@@ -828,11 +918,12 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 school_name = matched_schools[0]
 
                 # Bỏ các cột trống hoàn toàn (toàn NaN hoặc rỗng) để LLM và Fallback dễ xử lý
+                vf_match = _add_scale_columns(vf_match)
                 vf_match = vf_match.replace('', pd.NA).dropna(axis=1, how='all')
 
                 # Gửi TẤT CẢ dữ liệu cho LLM (tối đa 120 dòng — đủ cho hầu hết trường)
                 data_sample = vf_match.head(120)
-                export_cols = [c for c in ['Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn'] if c in data_sample.columns]
+                export_cols = [c for c in ['Mã ngành','Tên ngành','Năm','Phương thức xét tuyển','Thang điểm','Điểm chuẩn','Chỉ tiêu','Tổ hợp môn','Lưu ý'] if c in data_sample.columns]
                 data_context = data_sample[export_cols].to_csv(index=False, encoding='utf-8')
 
                 # Tóm tắt thống kê
@@ -841,7 +932,14 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     f"Phương thức: {', '.join(vf_match['Phương thức xét tuyển'].dropna().unique().tolist()) if 'Phương thức xét tuyển' in vf_match.columns else ''}. "
                 )
                 if 'Điểm chuẩn' in vf_match.columns:
-                    stats += f"Điểm chuẩn: {vf_match['Điểm chuẩn'].min()} - {vf_match['Điểm chuẩn'].max()}."
+                    if 'Thang điểm' in vf_match.columns and 'Phương thức xét tuyển' in vf_match.columns:
+                        # Mỗi phương thức/thang một khoảng điểm riêng (không gộp 30/150/1200 thành một min-max vô nghĩa)
+                        per_scale = vf_match.groupby(['Phương thức xét tuyển', 'Thang điểm'])['Điểm chuẩn'].agg(['min', 'max'])
+                        stats += "Khoảng điểm chuẩn theo từng phương thức: " + "; ".join(
+                            f"{m} ({t}): {lo}-{hi}" for (m, t), (lo, hi) in zip(per_scale.index, per_scale.values)
+                        ) + "."
+                    else:
+                        stats += f"Điểm chuẩn: {vf_match['Điểm chuẩn'].min()} - {vf_match['Điểm chuẩn'].max()}."
 
                 table_rule = (
                     "7. KHÔNG tạo bảng Markdown. Bảng dữ liệu đã được hiển thị phía trên bằng giao diện bảng. Chỉ dùng Markdown cho phần nhận xét, bullet và nhấn mạnh."
@@ -868,7 +966,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 {table_rule}
 8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu (VD: "Điểm chuẩn **năm 2025**").
 9. Nếu dữ liệu CSV KHÔNG CÓ thông tin user hỏi → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
-10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường {school_name} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường {school_name} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng.
+11. {_SCALE_RULE}"""
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
@@ -925,7 +1024,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
                     sort_col = 'Điểm chuẩn_Num' if 'Điểm chuẩn_Num' in vf_match.columns else 'Điểm chuẩn'
-                    sorted_df = vf_match.sort_values(sort_col, ascending='thấp' in query_lower).head(10)
+                    rank_df, _ = _restrict_to_comparable_scale(vf_match, user_query)
+                    sorted_df = rank_df.sort_values(sort_col, ascending='thấp' in query_lower).head(10)
                     table = "| Tên ngành | Phương thức | Điểm chuẩn |\n|---|---|---|\n"
                     for _, r in sorted_df.iterrows():
                         table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"

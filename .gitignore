@@ -102,3 +102,9 @@ docs/plans/planprompt.md
 # === SUBMODULES / CLONED REPOS ===
 codegraph/
 .codegraph/
+
+# Nguon PDF/DOCX DATS tam thoi (giai nen tu zip)
+data/_dats_src/
+data/*_report.json
+scratch/
+test_out.txt

@@ -45,7 +45,9 @@ jobs:
           python-version: '3.11'
       - run: pip install flake8 black
       - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-      - run: black --check . || echo "Black formatting check passed (mock)"
+      # Chưa chuẩn hoá format toàn repo nên chỉ báo cáo, không chặn pipeline (continue-on-error thay cho `|| echo` che lỗi).
+      - run: black --check . --exclude '(frontend|node_modules|\.venv|venv)'
+        continue-on-error: true
 
   backend-test:
     name: Backend CI / Test & Coverage
@@ -62,7 +64,7 @@ jobs:
           cache: 'pip'
       - run: pip install -r requirements.txt
       - run: pip install pytest pytest-cov
-      - run: python -m pytest tests/test_matcher.py -v --cov=agents --cov-report=xml
+      - run: python -m pytest tests -v --cov=agents --cov=utils --cov-report=xml
 
   backend-security:
     name: Backend CI / Security Scan

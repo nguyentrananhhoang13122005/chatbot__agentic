@@ -1,6 +1,6 @@
 # 🎓 UniSearch AI — Hệ thống AI Phân tích Xét điểm & Gợi ý Tuyển sinh Đại học
 
-[![Tests](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml/badge.svg)](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/test.yml)
+[![Tests](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/enterprise_ci.yml/badge.svg)](https://github.com/nguyentrananhhoang13122005/chatbot__agentic/actions/workflows/enterprise_ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 
 Hệ thống AI thông minh hỗ trợ phân tích điểm thi, tính toán tổ hợp, và tư vấn trường đại học phù hợp cho thí sinh Việt Nam. Hệ thống tập trung tối đa vào độ chính xác của dữ liệu (zero-hallucination) bằng cách tách biệt tầng tính toán và tầng AI.
@@ -154,7 +154,7 @@ cd frontend && npm run build
 
 | Thành phần           | Công nghệ                                          |
 | -------------------- | ---------------------------------------------------- |
-| AI / LLM             | OpenRouter API (`qwen/qwen3-8b` + fallback models) |
+| AI / LLM             | OpenRouter API (`qwen/qwen3.7-flash` + fallback models) |
 | Backend              | FastAPI + Uvicorn                                    |
 | Frontend             | Next.js 15 + React + Tailwind CSS + shadcn/ui        |
 | Cơ sở dữ liệu       | SQLite (truy vấn tốc độ cao O(log N))               |

@@ -156,8 +156,11 @@ def process_file(filepath: str, filename: str) -> dict:
     if date_match:
         date = date_match.group(1).strip()
     
-    # Giới hạn content để tránh quá lớn (giữ 8000 ký tự đầu)
-    content_trimmed = content[:8000]
+    # KHÔNG cắt nội dung: trước đây cắt 8000 ký tự đầu nên 71/96 file mất phần sau (chỉ tiêu, học phí...).
+    # Recommender đã chunk theo câu hỏi lúc truy vấn nên lưu đầy đủ không làm phình context gửi LLM.
+    # Đặt DATS_MAX_CHARS=<số> nếu thực sự cần giới hạn (0 = không giới hạn).
+    max_chars = int(os.getenv("DATS_MAX_CHARS", "0"))
+    content_trimmed = content[:max_chars] if max_chars > 0 else content
     
     return {
         "Trường": school_name,
@@ -195,6 +198,15 @@ def main():
     
     df = pd.DataFrame(records)
     df.to_csv(OUTPUT_CSV, index=False, encoding='utf-8-sig')
+
+    # Cập nhật các dòng năm 2026 trong master (giữ nguyên 2024/2025) để `scripts/migrate_csv_to_sqlite.py` nạp bản đầy đủ.
+    master_path = os.path.join("data", "data_tuyensinh_master.csv")
+    if os.path.exists(master_path):
+        master = pd.read_csv(master_path)
+        master = master[master["Năm"] != 2026]
+        master = pd.concat([master, df], ignore_index=True)
+        master.to_csv(master_path, index=False, encoding='utf-8-sig')
+        print(f"  ✅ Đã cập nhật {len(df)} dòng 2026 trong {master_path} (tổng {len(master)})")
     
     print(f"\n{'=' * 60}")
     print(f"✅ Hoàn thành!")

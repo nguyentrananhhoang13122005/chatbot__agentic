@@ -17,7 +17,10 @@ XLSX_DIR = r"data/3. Điểm chuẩn năm 2025-20260507T075825Z-3-001/3. Điểm
 OUTPUT_CSV = "data/data_diem_chuan_verified.csv"
 
 # === SCHEMA CHUẨN ===
-STANDARD_COLS = ["Trường", "Mã ngành", "Tên ngành", "Năm", "Phương thức xét tuyển", "Điểm chuẩn", "Chỉ tiêu", "Tổ hợp môn", "Ghi chú"]
+STANDARD_COLS = ["Trường", "Mã ngành", "Tên ngành", "Năm", "Phương thức xét tuyển", "Điểm chuẩn", "Chỉ tiêu", "Tổ hợp môn", "Ghi chú", "Sheet gốc"]
+RAW_CSV = "data/data_diem_chuan_verified_raw.csv"
+QUARANTINE_CSV = "data/data_diem_chuan_quarantine.csv"
+QUALITY_REPORT_JSON = "data/quality_report.json"
 
 # === BẢNG ÁNH XẠ MÃ TRƯỜNG → TÊN ĐẦY ĐỦ (cho 119 file chỉ có mã) ===
 SCHOOL_CODE_MAP = {
@@ -111,16 +114,20 @@ def detect_method_from_sheet(sheet_title: str, first_row_text: str) -> str:
     combined = (sheet_title + " " + first_row_text).lower()
 
     if 'đgnl' in combined or 'đánh giá năng lực' in combined:
-        if 'hn' in combined or 'hà nội' in combined or 'hcm' not in combined:
-            return "Xét điểm ĐGNL ĐHQG Hà Nội"
-        return "Xét điểm ĐGNL ĐHQG TPHCM"
+        if re.search(r'\b(hcm|tphcm|sài gòn)\b', combined):
+            return "Xét điểm ĐGNL ĐHQG TPHCM"
+        # ĐGNL của ĐH Sư phạm HN có thang khác (đã quy về 30) → không gộp với ĐGNL ĐHQG HN (thang 150)
+        if re.search(r'\b(đhsp|sp|sư phạm)\b', combined):
+            return "Xét điểm ĐGNL ĐHSP Hà Nội"
+        return "Xét điểm ĐGNL ĐHQG Hà Nội"
     if 'tư duy' in combined or 'đgtd' in combined:
         return "Xét điểm Đánh giá Tư duy"
-    if 'học bạ' in combined or 'hb' in combined:
+    # Dùng ranh giới từ: trước đây 'hb' / 'sat' khớp nhầm vào giữa các từ khác
+    if 'học bạ' in combined or re.search(r'\bhb\b', combined):
         return "Xét điểm Học bạ THPT"
     if 'thpt' in combined or 'thi tốt' in combined or 'tốt nghiệp' in combined:
         return "Xét điểm thi THPT"
-    if 'chứng chỉ' in combined or 'quốc tế' in combined or 'ielts' in combined or 'sat' in combined:
+    if 'chứng chỉ' in combined or 'quốc tế' in combined or 'ielts' in combined or re.search(r'\bsat\b', combined):
         return "Xét chứng chỉ quốc tế"
     if 'xét tuyển sớm' in combined or 'sớm' in combined:
         return "Xét tuyển sớm"
@@ -231,6 +238,7 @@ def process_one_file(filepath: str) -> list:
                 "Chỉ tiêu": row_vals[chi_tieu_idx] if chi_tieu_idx and chi_tieu_idx < len(row_vals) else None,
                 "Tổ hợp môn": row_vals[to_hop_idx] if to_hop_idx and to_hop_idx < len(row_vals) else None,
                 "Ghi chú": row_vals[ghi_chu_idx] if ghi_chu_idx and ghi_chu_idx < len(row_vals) else None,
+                "Sheet gốc": ws.title,
             })
 
     wb.close()
@@ -261,13 +269,21 @@ def main():
             failed += 1
             print(f"  ❌ [{i}/{len(xlsx_files)}] {fname[:50]}... → Không trích xuất được")
 
-    # Tạo DataFrame và xuất CSV
+    # Tạo DataFrame; giữ bản RAW (ELT) rồi mới áp quality gate
     df = pd.DataFrame(all_records, columns=STANDARD_COLS)
-
-    # Clean up
     df = df.dropna(subset=["Tên ngành"])
-    df["Điểm chuẩn"] = pd.to_numeric(df["Điểm chuẩn"], errors="coerce")
-    df = df.drop_duplicates(subset=["Trường", "Mã ngành", "Tên ngành", "Phương thức xét tuyển"], keep="first")
+    df.to_csv(RAW_CSV, index=False, encoding="utf-8-sig")
+
+    # Quality gate: NFC, thống nhất tên trường, nhóm phương thức + thang điểm, khôi phục/loại điểm lỗi,
+    # bỏ trùng đúng nghĩa (KHÔNG còn bỏ nhầm dòng khác Tổ hợp môn như trước).
+    from utils.data_quality import clean_verified
+    import json
+    clean, quarantine, report = clean_verified(df)
+    df = clean
+    quarantine.to_csv(QUARANTINE_CSV, index=False, encoding="utf-8-sig")
+    with open(QUALITY_REPORT_JSON, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, ensure_ascii=False, indent=2)
+    print(f"  🧹 Quality gate: {report['rows_clean']} sạch / {report['rows_quarantined']} quarantine / {report['duplicates_dropped']} trùng")
 
     # Xuất CSV
     df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")

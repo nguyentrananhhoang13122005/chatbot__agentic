@@ -865,15 +865,39 @@ Mục tiêu: giúp học sinh hiểu nên ưu tiên trường/ngành nào, vì s
 {missing_text}
 
 ## Nhiệm vụ trả lời
-Viết tư vấn bằng tiếng Việt, hướng tới học sinh lớp 12. Cấu trúc bắt buộc:
+Hãy đóng vai chuyên gia tư vấn tuyển sinh đại học hàng đầu, đưa ra lời khuyên chiến lược ngắn gọn, sắc bén và dễ hiểu nhất cho học sinh lớp 12.
 
-1. **Tóm tắt năng lực**: nêu môn mạnh, tổ hợp lợi thế và điểm cần lưu ý.
-2. **Phân tích các lựa chọn chính**: phân tích từng lựa chọn trong "Danh sách phân tích sâu"; giải thích vì sao phù hợp hoặc vì sao rủi ro dựa trên ngành, tổ hợp, điểm chuẩn, Chênh lệch điểm, nhóm cạnh tranh, phương thức xét tuyển và điều kiện phụ.
-3. **Thứ tự nguyện vọng nên ưu tiên**: dùng đúng thứ tự hệ thống đề xuất, kèm lý do ngắn cho từng dòng.
-4. **Roadmap backup**: nêu nhóm an toàn/vừa sức/thử thách nên dùng thế nào, và nhắc ngắn các lựa chọn tham khảo nếu có.
-5. **Lưu ý cần kiểm tra**: nhắc cảnh báo, điều kiện phụ, dữ liệu còn thiếu hoặc quy chế liên quan nếu có.
+Bắt buộc tuân theo cấu trúc 5 phần sau với tiêu đề Markdown rõ ràng:
 
-## Quy tắc bắt buộc
+### 🎯 1. Đánh giá năng lực & Điểm mấu chốt
+- Nêu rõ các môn thế mạnh và điểm nghẽn (môn kéo tụt điểm).
+- Chỉ rõ tổ hợp có điểm số cao nhất (ví dụ: **A07**, **D01**) và giải thích tại sao nên ưu tiên tổ hợp này thay vì các tổ hợp bị môn yếu kéo xuống.
+
+### 📊 2. Phân tích các lựa chọn trọng điểm
+Phân tích từng trường/ngành trong "Danh sách phân tích sâu":
+- Ghi rõ tên trường, ngành, tổ hợp xét tuyển.
+- Đánh giá mức độ cạnh tranh theo đúng nhóm: **[An toàn]**, **[Vừa sức]**, hoặc **[Thử thách]**.
+- Nêu rõ Chênh lệch điểm (+/- bao nhiêu điểm so với điểm chuẩn 2024-2025).
+- Giải thích ngắn gọn vì sao lựa chọn này hợp lý hoặc tiềm ẩn rủi ro gì.
+
+### 📋 3. Thứ tự nguyện vọng chiến lược đề xuất
+Sắp xếp thứ tự nguyện vọng theo đúng thứ tự hệ thống đề xuất:
+- NV1, NV2: Nguyện vọng thử thách hoặc mục tiêu mơ ước.
+- NV3, NV4: Nguyện vọng vừa sức làm trọng tâm đỗ.
+- NV5+: Nguyện vọng an toàn tuyệt đối làm phao cứu sinh.
+Ghi lý do ngắn gọn 1 dòng cho mỗi nguyện vọng.
+
+### 🛡️ 4. Chiến lược dự phòng (Backup Roadmap)
+Hướng dẫn cách phân bổ tỷ lệ nguyện vọng (thử thách : vừa sức : an toàn) và nhắc các lựa chọn dự phòng nếu cần mở rộng.
+
+### ⚠️ 5. Tiêu chí phụ & Lưu ý tuyển sinh quan trọng
+- Dữ liệu điểm chuẩn tham chiếu: Công bố tuyển sinh 2024 - 2025.
+- Cảnh báo tiêu chí phụ: Nhắc học sinh kiểm tra quy chế của từng trường (nhân đôi môn chính, quy đổi chứng chỉ ngoại ngữ, điều kiện học bạ THPT hoặc bài thi ĐGNL).
+
+## Quy tắc định dạng bắt buộc
+- BẮT BUỘC bắt đầu ngay bằng tiêu đề `### 🎯 1. Đánh giá năng lực & Điểm mấu chốt`. TUYỆT ĐỐI KHÔNG mở đầu bằng dấu chấm lửng '...', '..', dấu gạch ngang '-', hay lời chào sáo rỗng.
+- Nhãn nhóm cạnh tranh BẮT BUỘC đặt trong dấu ngoặc vuông in đậm: **[An toàn]**, **[Vừa sức]**, **[Thử thách]** để giao diện làm nổi bật badge màu.
+- Mã tổ hợp BẮT BUỘC in đậm: **A00**, **A01**, **A07**, **B02**, **D01**...
 - Không tự chọn lại danh sách phân tích sâu.
 - Không tự đảo thứ tự nguyện vọng đề xuất, trừ khi phát hiện mâu thuẫn dữ liệu nghiêm trọng; nếu có mâu thuẫn, phải nói rõ mâu thuẫn.
 - Không thêm trường, ngành, học phí, ranking, danh tiếng, chỉ tiêu hoặc số liệu ngoài dữ liệu đã cung cấp.
@@ -889,7 +913,9 @@ Viết tư vấn bằng tiếng Việt, hướng tới học sinh lớp 12. Cấ
 def generate_analysis_stream(result: dict, chat_history: list = None):
     """
     Gọi LLM phân tích kết quả và trả về generator stream.
+    Lọc bỏ các ký tự rác hoặc dấu chấm lửng ở đầu stream.
     """
+    import re
     from llm_client import call_llm_stream, OPENROUTER_FALLBACK_MODELS
 
     prompt = build_analysis_prompt(result)
@@ -898,9 +924,25 @@ def generate_analysis_stream(result: dict, chat_history: list = None):
         {"role": "user", "content": "Hãy phân tích bảng điểm và danh sách trường phù hợp ở trên cho em."},
     ]
 
-    return call_llm_stream(
+    raw_stream = call_llm_stream(
         messages=messages,
         model=OPENROUTER_FALLBACK_MODELS[0],
         temperature=0.3,
         max_tokens=3000,
     )
+
+    started = False
+    prefix_buffer = ""
+    for chunk in raw_stream:
+        if not chunk:
+            continue
+        if not started:
+            prefix_buffer += chunk
+            # Lọc bỏ dấu chấm lửng .. hoặc ký tự rác đầu chuỗi
+            cleaned = re.sub(r'^[.\s:]+', '', prefix_buffer)
+            if cleaned or len(prefix_buffer) > 25:
+                started = True
+                if cleaned:
+                    yield cleaned
+        else:
+            yield chunk

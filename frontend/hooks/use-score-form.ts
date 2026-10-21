@@ -50,6 +50,7 @@ export type ScoreAction =
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ANALYZING"; payload: boolean }
   | { type: "SET_ANALYSIS_TRIGGERED"; payload: boolean }
+  | { type: "CLEAR_ANALYSIS" }
   | { type: "RESET" };
 
 const initialState: ScoreState = {
@@ -102,6 +103,8 @@ function scoreReducer(state: ScoreState, action: ScoreAction): ScoreState {
       return { ...state, result: action.payload, aiAnalysis: action.payload.analysis ?? "" };
     case "APPEND_ANALYSIS":
       return { ...state, aiAnalysis: state.aiAnalysis + action.payload };
+    case "CLEAR_ANALYSIS":
+      return { ...state, aiAnalysis: "", isAnalyzing: false, analysisTriggered: false };
     case "SET_LOADING":
       return { ...state, isLoading: action.payload };
     case "SET_ANALYZING":
