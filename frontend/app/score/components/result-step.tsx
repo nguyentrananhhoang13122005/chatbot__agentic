@@ -164,6 +164,13 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
     }, controller.signal);
   };
 
+  const handleReanalyze = () => {
+    dispatch({ type: "CLEAR_ANALYSIS" });
+    setTimeout(() => {
+      handleStartAnalysis();
+    }, 50);
+  };
+
   const schools = state.result?.schools || [];
   const combos = (state.result?.top_combinations as Array<{ code: string; subjects: string[]; total: number; below_threshold?: boolean }>) || [];
   const strength = state.result?.strength || {};
@@ -253,6 +260,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
                   isAnalyzing={state.isAnalyzing}
                   analysisTriggered={state.analysisTriggered}
                   onStartAnalysis={handleStartAnalysis}
+                  onReanalyze={handleReanalyze}
                 />
               </div>
 
@@ -280,6 +288,7 @@ export function ResultStep({ state, dispatch }: ResultStepProps) {
                 isAnalyzing={state.isAnalyzing}
                 analysisTriggered={state.analysisTriggered}
                 onStartAnalysis={handleStartAnalysis}
+                onReanalyze={handleReanalyze}
               />
             </div>
           </div>

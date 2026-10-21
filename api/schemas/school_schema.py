@@ -40,3 +40,15 @@ class RecommendRequest(BaseModel):
 
 class RecommendResponse(BaseModel):
     answer: str = Field(..., description="Câu trả lời từ AI")
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="user | assistant")
+    content: str = Field(..., description="Nội dung tin nhắn")
+
+class ChatRequest(BaseModel):
+    user_query: str = Field(..., description="Câu hỏi mới nhất của người dùng")
+    history: List[ChatMessage] = Field(default=[], description="Các lượt hội thoại gần nhất (server sẽ cắt còn vài lượt)")
+    stream: bool = Field(True, description="Trả về SSE (true) hay JSON (false)")
+    has_file: bool = Field(False, description="Người dùng có đính kèm CV hay không")
+    session_id: Optional[str] = Field(None, description="ID phiên chat để lưu lịch sử")
+

@@ -25,6 +25,7 @@ data/**/*.db
 data/*.db
 data/chat_history.db
 data/backups/
+data/_dats_src/
 logs/
 scratch/
 

@@ -55,15 +55,19 @@ Người dùng có đính kèm file CV?: Không có file"""
     return json.loads(json_str)
 
 
-def run_school_match(school_query: str, use_verified: bool = False) -> str:
+def run_school_match(school_query: str, use_verified: bool = True) -> str:
     """Chạy Hybrid Matcher trên school_query."""
-    from agents.recommender import find_matching_schools
+    from agents.recommender import find_matching_schools, get_verified_schools
     import pandas as pd
 
+    schools = []
     if use_verified:
-        df = pd.read_csv('data/data_diem_chuan_verified.csv').fillna('')
-        schools = df['Trường'].dropna().unique().tolist()
-    else:
+        schools = get_verified_schools()
+        if not schools and os.path.exists('data/data_diem_chuan_verified.csv'):
+            df = pd.read_csv('data/data_diem_chuan_verified.csv').fillna('')
+            schools = df['Trường'].dropna().unique().tolist()
+
+    if not schools and os.path.exists('data/data_tuyensinh_clean.csv'):
         df = pd.read_csv('data/data_tuyensinh_clean.csv', low_memory=False).fillna('')
         schools = df['Tên Trường'].dropna().unique().tolist()
 
@@ -71,7 +75,7 @@ def run_school_match(school_query: str, use_verified: bool = False) -> str:
     return matches[0] if matches else None
 
 
-def evaluate(tc: dict, analyzer_result: dict, matched_school: str) -> dict:
+def evaluate(tc: dict, analyzer_result: dict, matched_school: str, answer_text: str = None) -> dict:
     """Đánh giá PASS/FAIL."""
     checks = []
     all_pass = True
@@ -80,7 +84,12 @@ def evaluate(tc: dict, analyzer_result: dict, matched_school: str) -> dict:
     expected_intent = tc.get("expected_intent")
     if expected_intent:
         actual = analyzer_result.get("intent", "").upper()
-        if expected_intent.upper() == actual:
+        if isinstance(expected_intent, (list, tuple)):
+            intent_pass = actual in [ei.upper() for ei in expected_intent]
+        else:
+            intent_pass = expected_intent.upper() == actual
+
+        if intent_pass:
             checks.append(("Intent", "PASS", f"{actual}"))
         else:
             checks.append(("Intent", "FAIL", f"expected={expected_intent}, got={actual}"))
@@ -98,6 +107,14 @@ def evaluate(tc: dict, analyzer_result: dict, matched_school: str) -> dict:
     for kw in tc.get("expected_school_not_contains", []):
         if matched_school and kw.lower() in matched_school.lower():
             checks.append(("School✗", "FAIL", f"'{kw}' should NOT be in '{matched_school}'"))
+            all_pass = False
+
+    # Answer contains
+    for kw in tc.get("expected_answer_contains", []):
+        if answer_text and kw.lower() in answer_text.lower():
+            checks.append(("Answer✓", "PASS", f"'{kw}' ∈ answer"))
+        else:
+            checks.append(("Answer✓", "FAIL", f"'{kw}' ∉ '{answer_text[:80] if answer_text else 'None'}'"))
             all_pass = False
 
     return {"status": "PASS" if all_pass else "FAIL", "checks": checks}
@@ -140,14 +157,21 @@ def main():
             # Step 2: Run Matcher (skip if school=ALL or category=routing)
             matched = None
             if school_query != "ALL" and cat != "routing":
-                # Try verified first
                 matched = run_school_match(school_query, use_verified=True)
                 if not matched:
                     matched = run_school_match(school_query, use_verified=False)
                 print(f"  Matcher → '{matched}'")
 
-            # Step 3: Evaluate
-            result = evaluate(tc, analysis, matched)
+            # Step 3: Run Recommender for answer if required
+            answer_text = None
+            if tc.get("expected_answer_contains"):
+                from agents.recommender import query_diem_chuan
+                answer_text = query_diem_chuan(user_query=query, pre_extracted_school=school_query)
+                snippet = (answer_text[:120] + "...") if len(answer_text) > 120 else answer_text
+                print(f"  Answer → {snippet.strip()}")
+
+            # Step 4: Evaluate
+            result = evaluate(tc, analysis, matched, answer_text)
             icon = "✅" if result["status"] == "PASS" else "❌"
             print(f"  {icon} {result['status']}")
             for cn, cs, cd in result["checks"]:

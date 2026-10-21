@@ -7,8 +7,9 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "data", "chat_history.db")
 
 
 def _get_conn() -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    target_path = os.getenv("AUTH_DB_PATH") or DB_PATH
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    conn = sqlite3.connect(target_path, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
     return conn
 

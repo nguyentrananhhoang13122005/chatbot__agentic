@@ -68,6 +68,8 @@ def _prepare_verified_dataframe(csv_path: str) -> tuple[pd.DataFrame, str]:
         df_verified["Năm_Num"] = pd.Series([pd.NA] * len(df_verified), dtype="Int64")
 
     df_verified["row_hash"] = df_verified.apply(_compute_row_hash, axis=1)
+    # Unique index trên row_hash: loại bản sao để việc nạp không bao giờ việc thất bại vì trùng.
+    df_verified = df_verified.drop_duplicates(subset=["row_hash"], keep="first")
     return df_verified, _sha256_file(csv_path)
 
 
@@ -105,6 +107,11 @@ def _create_verified_indexes(conn: sqlite3.Connection) -> None:
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_verified_ma_nganh ON diem_chuan_verified("Mã ngành");')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_verified_diem ON diem_chuan_verified("Điểm chuẩn_Num");')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_verified_nam ON diem_chuan_verified("Năm_Num");')
+    columns = {row[1] for row in cursor.execute("PRAGMA table_info(diem_chuan_verified)")}
+    if "school_id" in columns:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_verified_school_id ON diem_chuan_verified(school_id);')
+    if "method_group" in columns:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_verified_method_group ON diem_chuan_verified(method_group, score_scale);')
 
 
 def _update_metadata(conn: sqlite3.Connection, source_hash: str) -> None:
@@ -146,6 +153,24 @@ def sync_csv_to_db(db_path="data/admissions.db"):
         _create_verified_indexes(conn)
         _update_metadata(conn, source_hash)
         print("⚡ Đã tạo Index cho 'diem_chuan_verified'.")
+
+        # Bảng quarantine: dữ liệu bị quality gate loại. Bot KHÔNG được đọc bảng này (data contract).
+        csv_quarantine = "data/data_diem_chuan_quarantine.csv"
+        quarantine_rows = 0
+        if os.path.exists(csv_quarantine):
+            df_q = pd.read_csv(csv_quarantine).fillna("")
+            df_q.to_sql('diem_chuan_quarantine', conn, if_exists='replace', index=False)
+            quarantine_rows = len(df_q)
+            print(f"🚧 Đã ghi {quarantine_rows} dòng vào 'diem_chuan_quarantine'.")
+        years = pd.to_numeric(df_verified.get("Năm_Num"), errors="coerce").dropna()
+        conn.executemany(
+            "INSERT OR REPLACE INTO db_metadata(key, value) VALUES (?, ?)",
+            [
+                ("verified_rows", str(len(df_verified))),
+                ("quarantine_rows", str(quarantine_rows)),
+                ("verified_latest_year", str(int(years.max())) if not years.empty else ""),
+            ],
+        )
 
     # 2. Bảng dats_master
     csv_master = "data/data_tuyensinh_master.csv"

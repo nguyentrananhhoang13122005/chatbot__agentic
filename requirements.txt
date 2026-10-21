@@ -28,3 +28,4 @@ pip-audit>=2.7.0
 # --- Auth ---
 PyJWT>=2.8.0
 bcrypt>=4.1.2
+openpyxl>=3.1.0  # ETL: doc file Excel (etl_xlsx_to_db.py)

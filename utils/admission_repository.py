@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sqlite3
 import warnings
@@ -14,6 +15,8 @@ from typing import Iterable
 import pandas as pd
 
 from utils.method_normalizer import EXAM_METHOD_ALIASES, is_exam_method, normalize_method
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_DB_PATH = Path("data/admissions.db")
@@ -189,16 +192,20 @@ class AdmissionRepository:
         """Persist a parsed-rule JSON string in SQLite cache."""
         if self._use_csv_fallback:
             return
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO admission_rule_cache
-                    (row_hash, rule_json, parser_version, data_version, created_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                """,
-                (row_hash, rule_json, parser_version, data_version),
-            )
-            conn.commit()
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO admission_rule_cache
+                        (row_hash, rule_json, parser_version, data_version, created_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                    """,
+                    (row_hash, rule_json, parser_version, data_version),
+                )
+                conn.commit()
+        except sqlite3.OperationalError:
+            # Cache chỉ để tăng tốc: bỏ qua lỗi I/O thay vì làm hỏng cả request.
+            logger.warning("Không ghi được admission_rule_cache, bỏ qua", exc_info=True)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)

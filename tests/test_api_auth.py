@@ -8,15 +8,19 @@ from auth_db import init_auth_db, _get_conn
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def setup_db(tmp_path, monkeypatch):
+    test_db = str(tmp_path / "auth_test.db")
+    monkeypatch.setenv("AUTH_DB_PATH", test_db)
     init_auth_db()
     yield
-    # Cleanup DB after tests
-    conn = _get_conn()
-    conn.execute("DELETE FROM users")
-    conn.execute("DELETE FROM oauth_states")
-    conn.commit()
-    conn.close()
+    try:
+        conn = _get_conn()
+        conn.execute("DELETE FROM users")
+        conn.execute("DELETE FROM oauth_states")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 def test_register_success():
     response = client.post(
