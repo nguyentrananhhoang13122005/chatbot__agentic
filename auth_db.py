@@ -165,10 +165,27 @@ def update_password(user_id: str, new_password_hash: str):
 
 def delete_user_account(user_id: str):
     conn = _get_conn()
-    # Cascade delete messages and searched universities
-    conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
-    conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+    # Cascade delete messages and searched universities in local DB if tables exist
+    try:
+        conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+    except Exception:
+        pass
+    try:
+        conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+    except Exception:
+        pass
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+
+    # Cascade delete in chat_db as well if separate DB is configured
+    try:
+        import chat_db
+        c_conn = chat_db._get_conn()
+        c_conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+        c_conn.execute("DELETE FROM searched_universities WHERE user_id = ?", (user_id,))
+        c_conn.commit()
+        c_conn.close()
+    except Exception:
+        pass
 

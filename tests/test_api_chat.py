@@ -1,18 +1,22 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from auth_db import init_auth_db, _get_conn
+from auth_db import init_auth_db, _get_conn as _get_auth_conn
+from chat_db import init_db as init_chat_db
 
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db(tmp_path, monkeypatch):
-    test_db = str(tmp_path / "auth_test.db")
-    monkeypatch.setenv("AUTH_DB_PATH", test_db)
+    test_auth_db = str(tmp_path / "auth_test.db")
+    test_chat_db = str(tmp_path / "chat_test.db")
+    monkeypatch.setenv("AUTH_DB_PATH", test_auth_db)
+    monkeypatch.setenv("CHAT_DB_PATH", test_chat_db)
     init_auth_db()
+    init_chat_db()
     yield
     try:
-        conn = _get_conn()
+        conn = _get_auth_conn()
         conn.execute("DELETE FROM users")
         conn.commit()
         conn.close()
