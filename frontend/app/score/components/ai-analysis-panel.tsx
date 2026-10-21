@@ -11,7 +11,6 @@ import {
   Copy, 
   Check, 
   Maximize2, 
-  Minimize2, 
   RefreshCw,
   Calendar,
   ShieldAlert,
@@ -45,11 +44,6 @@ export function AIAnalysisPanel({
 }: AIAnalysisPanelProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Lock body scroll and listen for ESC key when modal is open
   useEffect(() => {
@@ -254,6 +248,17 @@ export function AIAnalysisPanel({
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </Button>
+                {onReanalyze && !isAnalyzing && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={onReanalyze} 
+                    title="Phân tích lại" 
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                )}
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -318,7 +323,7 @@ export function AIAnalysisPanel({
       </div>
 
       {/* MODAL MỞ RỘNG TOÀN MÀN HÌNH ĐỂ ĐỌC THOẢI MÁI (PORTAL TRỰC TIẾP LÊN BODY) */}
-      {mounted && isExpanded && typeof document !== "undefined" && createPortal(
+      {isExpanded && typeof document !== "undefined" && createPortal(
         <div 
           className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 md:p-10 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-200"
           onClick={() => setIsExpanded(false)}

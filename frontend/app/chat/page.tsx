@@ -6,7 +6,6 @@ import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { 
   Send, 
   Sparkles, 
@@ -20,8 +19,7 @@ import {
   PanelLeft, 
   History, 
   X,
-  Lock,
-  ChevronRight
+  Lock
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -40,6 +38,13 @@ interface ChatSession {
   bookmarked?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+function generateSessionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `sess-${Date.now()}`;
 }
 
 const WELCOME_MESSAGE: Message = {
@@ -197,9 +202,7 @@ export default function ChatPage() {
     // Xác định sessionId (nếu là chat mới -> sinh UUID)
     let activeSessionId = currentSessionId;
     if (!activeSessionId) {
-      activeSessionId = typeof crypto !== "undefined" && crypto.randomUUID 
-        ? crypto.randomUUID() 
-        : `sess-${Date.now()}`;
+      activeSessionId = generateSessionId();
       setCurrentSessionId(activeSessionId);
     }
 
@@ -476,33 +479,33 @@ export default function ChatPage() {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
                         components={{
-                          table: ({ node, ...props }) => (
+                          table: ({ node: _node, ...props }) => (
                             <div className="my-3 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02] shadow-sm">
                               <table className="min-w-full text-xs md:text-sm text-left border-collapse" {...props} />
                             </div>
                           ),
-                          thead: ({ node, ...props }) => (
+                          thead: ({ node: _node, ...props }) => (
                             <thead className="bg-white/10 text-foreground font-semibold border-b border-white/10" {...props} />
                           ),
-                          tbody: ({ node, ...props }) => (
+                          tbody: ({ node: _node, ...props }) => (
                             <tbody className="divide-y divide-white/5" {...props} />
                           ),
-                          tr: ({ node, ...props }) => (
+                          tr: ({ node: _node, ...props }) => (
                             <tr className="hover:bg-white/[0.04] transition-colors" {...props} />
                           ),
-                          th: ({ node, ...props }) => (
+                          th: ({ node: _node, ...props }) => (
                             <th className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap" {...props} />
                           ),
-                          td: ({ node, ...props }) => (
+                          td: ({ node: _node, ...props }) => (
                             <td className="px-3 py-2 text-muted-foreground align-top" {...props} />
                           ),
-                          ul: ({ node, ...props }) => (
+                          ul: ({ node: _node, ...props }) => (
                             <ul className="my-2 list-disc pl-5 space-y-1" {...props} />
                           ),
-                          ol: ({ node, ...props }) => (
+                          ol: ({ node: _node, ...props }) => (
                             <ol className="my-2 list-decimal pl-5 space-y-1" {...props} />
                           ),
-                          p: ({ node, ...props }) => (
+                          p: ({ node: _node, ...props }) => (
                             <p className="my-1.5 leading-relaxed" {...props} />
                           ),
                         }}

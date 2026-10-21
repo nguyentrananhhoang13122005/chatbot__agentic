@@ -220,13 +220,15 @@ def chat(request: ChatRequest, http_request: Request, user: Optional[dict] = Dep
         logger.info("guardrail blocked code=%s key=%s", violation.code, client_key)
         if violation.status_code == 429:
             raise HTTPException(status_code=429, detail=violation.message)
+        v_code = violation.code
+        v_msg = violation.message
         if request.stream:
             def blocked_stream():
-                yield _sse({"type": "meta", "intent": "BLOCKED", "guardrail": violation.code})
-                yield _sse({"type": "chunk", "content": violation.message})
+                yield _sse({"type": "meta", "intent": "BLOCKED", "guardrail": v_code})
+                yield _sse({"type": "chunk", "content": v_msg})
                 yield "data: [DONE]\n\n"
             return StreamingResponse(blocked_stream(), media_type="text/event-stream")
-        return {"answer": violation.message, "intent": "BLOCKED"}
+        return {"answer": v_msg, "intent": "BLOCKED"}
 
     history = sanitize_history([m.model_dump() for m in request.history])
 
