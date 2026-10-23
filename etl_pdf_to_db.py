@@ -31,13 +31,11 @@ except ImportError:
 DATA_DIRS = {
     2024: os.path.join(
         "data",
-        "2. DATS Năm 2024-20260507T080130Z-3-001-20260507T131506Z-3-001",
         "2. DATS Năm 2024-20260507T080130Z-3-001",
         "2. DATS Năm 2024"
     ),
     2025: os.path.join(
         "data",
-        "1. DATS Năm 2025-20260507T075426Z-3-001-20260507T131251Z-3-001",
         "1. DATS Năm 2025-20260507T075426Z-3-001",
         "1. DATS Năm 2025"
     ),

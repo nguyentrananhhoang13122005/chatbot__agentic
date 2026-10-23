@@ -61,7 +61,7 @@ MOCK_SCHOOLS = [
 # ============================================================
 class TestNormalizeSchoolName:
     def test_strip_leading_number(self):
-        assert "đh bách khoa" in _normalize_school_name("33. ĐH Bách khoa")
+        assert "đại học bách khoa" in _normalize_school_name("33. ĐH Bách khoa")
 
     def test_strip_trailing_year(self):
         result = _normalize_school_name("ĐH ABC 2024")

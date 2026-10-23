@@ -1,0 +1,26 @@
+# Source Control & IDE
+.git
+.gitignore
+.github/
+.cursor/
+.agent/
+.pytest_cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Data & Logs (Let volumes handle this)
+data/**/*.db
+data/*.db
+data/chat_history.db
+data/backups/
+logs/
+scratch/
+
+# Local Streamlit config
+.streamlit/

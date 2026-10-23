@@ -3,6 +3,10 @@ import time
 from dotenv import load_dotenv
 from openai import OpenAI
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AuthenticationError, RateLimitError
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type, before_sleep_log
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 
@@ -85,6 +89,43 @@ def _retry_delay(error_info: dict, attempt_index: int) -> int:
     return [2, 4][min(attempt_index, 1)]
 
 
+# ======== TENACITY: Auto-retry cho 429 Too Many Requests ========
+def _is_retryable_error(error):
+    """Kiểm tra xem lỗi có nên retry không (429, connection, timeout)."""
+    if isinstance(error, RateLimitError):
+        return True
+    if isinstance(error, (APIConnectionError, APITimeoutError)):
+        return True
+    if isinstance(error, APIStatusError):
+        status_code = _status_code_from_error(error)
+        return status_code in (429, 500, 502, 503, 504)
+    return False
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(2),
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+def _call_openrouter_api(request_kwargs: dict):
+    """Gọi OpenRouter API với tenacity auto-retry (tối đa 3 lần, nghỉ 2 giây giữa mỗi lần)."""
+    return client.chat.completions.create(**request_kwargs)
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(2),
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+def _call_openrouter_api_stream(request_kwargs: dict):
+    """Gọi OpenRouter API stream với tenacity auto-retry (tối đa 3 lần, nghỉ 2 giây giữa mỗi lần)."""
+    return client.chat.completions.create(**request_kwargs)
+
+
 def validate_api_key() -> tuple[bool, str]:
     key = _ensure_api_key()
     if not key or not key.strip():
@@ -117,56 +158,53 @@ def call_llm(
     last_error = None
 
     for model_name in models:
-        attempt = 0
-        while attempt <= max_retries:
-            try:
-                request_kwargs = {
-                    "messages": messages,
-                    "model": model_name,
-                    "temperature": temperature,
-                }
-                if max_tokens is not None:
-                    request_kwargs["max_tokens"] = max_tokens
+        try:
+            request_kwargs = {
+                "messages": messages,
+                "model": model_name,
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                request_kwargs["max_tokens"] = max_tokens
 
-                completion = client.chat.completions.create(**request_kwargs)
-                content = completion.choices[0].message.content
-                return (content.strip() if content else ""), None
+            # tenacity tự động retry tối đa 3 lần (nghỉ 2s) nếu gặp 429/connection/timeout
+            completion = _call_openrouter_api(request_kwargs)
+            content = completion.choices[0].message.content
+            return (content.strip() if content else ""), None
 
-            except AuthenticationError as error:
-                error_info = _build_error_info("unauthorized", str(error), model_name, _status_code_from_error(error))
-                print(f"ERROR [LLM {model_name}]: {error_info['message']} {error_info['detail']}")
+        except AuthenticationError as error:
+            error_info = _build_error_info("unauthorized", str(error), model_name, _status_code_from_error(error))
+            print(f"ERROR [LLM {model_name}]: {error_info['message']}")
+            return None, error_info
+
+        except RateLimitError as error:
+            # Tenacity đã retry 3 lần mà vẫn 429 → chuyển sang model tiếp theo
+            error_info = _build_error_info("rate_limit", str(error), model_name, 429)
+            last_error = error_info
+            print(f"⚠️ [LLM {model_name}]: Rate limit sau 3 lần retry → thử model tiếp theo")
+            continue
+
+        except APIStatusError as error:
+            error_info = _classify_status_error(error, model_name)
+            last_error = error_info
+            if error_info["type"] in {"unauthorized", "quota_exceeded"}:
+                print(f"ERROR [LLM {model_name}]: {error_info['message']}")
                 return None, error_info
+            print(f"⚠️ [LLM {model_name}]: {error_info['message']} → thử model tiếp theo")
+            continue
 
-            except RateLimitError as error:
-                error_info = _build_error_info("rate_limit", str(error), model_name, _status_code_from_error(error) or 429)
-                last_error = error_info
+        except (APIConnectionError, APITimeoutError) as error:
+            # Tenacity đã retry 3 lần mà vẫn lỗi kết nối → chuyển model
+            error_info = _build_error_info("connection_error", str(error), model_name)
+            last_error = error_info
+            print(f"⚠️ [LLM {model_name}]: Connection error sau 3 lần retry → thử model tiếp theo")
+            continue
 
-            except APIStatusError as error:
-                error_info = _classify_status_error(error, model_name)
-                last_error = error_info
-                if error_info["type"] in {"unauthorized", "quota_exceeded"}:
-                    print(f"ERROR [LLM {model_name}]: {error_info['message']} {error_info['detail']}")
-                    return None, error_info
-
-            except (APIConnectionError, APITimeoutError) as error:
-                error_info = _build_error_info("connection_error", str(error), model_name)
-                last_error = error_info
-
-            except Exception as error:
-                error_info = _build_error_info("unknown", str(error), model_name)
-                last_error = error_info
-                print(f"ERROR [LLM {model_name}]: {error_info['message']} {error_info['detail']}")
-                break
-
-            if _should_retry(last_error) and attempt < max_retries:
-                delay = _retry_delay(last_error, attempt)
-                print(f"⏳ Retry {attempt + 1}/{max_retries} for {model_name} after {delay}s: {last_error['message']}")
-                time.sleep(delay)
-                attempt += 1
-                continue
-
-            print(f"ERROR [LLM {model_name}]: {last_error['message']} {last_error.get('detail', '')}")
-            break
+        except Exception as error:
+            error_info = _build_error_info("unknown", str(error), model_name)
+            last_error = error_info
+            print(f"ERROR [LLM {model_name}]: {error_info['message']} {error_info['detail']}")
+            continue
 
     return None, last_error or _build_error_info("unknown")
 
@@ -195,7 +233,8 @@ def call_llm_stream(
         if max_tokens is not None:
             request_kwargs["max_tokens"] = max_tokens
 
-        stream = client.chat.completions.create(**request_kwargs)
+        # tenacity tự động retry tối đa 3 lần (nghỉ 2s) nếu gặp 429/connection/timeout
+        stream = _call_openrouter_api_stream(request_kwargs)
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 yielded_any = True
@@ -219,6 +258,8 @@ def call_llm_stream(
             yield "\n\n⚠️ Kết nối AI bị gián đoạn trong lúc truyền dữ liệu. Vui lòng thử lại nếu câu trả lời chưa đầy đủ."
             return
 
+        # Tenacity đã retry 3 lần stream mà vẫn lỗi → fallback sang non-stream call_llm (có retry riêng)
+        print(f"⚠️ [LLM Stream {model_name}]: Stream failed sau retry → fallback sang non-stream")
         content, error_info = call_llm(
             messages=messages,
             model_list=OPENROUTER_FALLBACK_MODELS,

@@ -7,50 +7,126 @@ if sys.stdout.encoding != 'utf-8':
 from llm_client import OPENROUTER_FALLBACK_MODELS, call_llm, call_llm_stream
 
 # --- KHỞI TẠO DATABASE ---
-# Load Data một lần duy nhất vào RAM khi ứng dụng khởi chạy (tăng tốc độ phản hồi)
+# Để tránh OOM và Full Table Scan, giờ ta ưu tiên dùng SQLite thay vì load toàn bộ CSV vào RAM.
+import sqlite3
+
+DB_PATH = "data/admissions.db"
 csv_path = "data/data_tuyensinh_clean.csv"
 verified_path = "data/data_diem_chuan_verified.csv"
-dats_2026_path = "data/data_tuyensinh_2026.csv"
-dats_2025_path = "data/data_tuyensinh_2025_dats.csv"
-dats_2024_path = "data/data_tuyensinh_2024.csv"
+master_path = "data/data_tuyensinh_master.csv"
 
+# Vẫn giữ df_tuyensinh vì nó nhỏ và ít khi query nặng
 try:
     if os.path.exists(csv_path):
         df_tuyensinh = pd.read_csv(csv_path, low_memory=False).fillna("")
     else:
         df_tuyensinh = None
 
-    if os.path.exists(verified_path):
-        df_verified = pd.read_csv(verified_path).fillna("")
-        print(f"✅ [Recommender] Verified DB loaded: {len(df_verified)} dòng, {df_verified['Trường'].nunique()} trường")
+    # Thay vì load toàn bộ df_verified và df_dats vào RAM, ta kiểm tra SQLite
+    if os.path.exists(DB_PATH):
+        print("✅ [Recommender] Kết nối thành công tới SQLite Database (Admissions.db)")
+        # Khởi tạo dummy biến để pass qua các check `if df_verified is not None`
+        df_verified = pd.DataFrame({'Trường': []}) 
+        df_dats = pd.DataFrame({'Trường': []})
     else:
-        df_verified = None
+        print("⚠️ [Recommender] Chưa có SQLite DB, fallback dùng CSV (Chậm & tốn RAM).")
+        if os.path.exists(verified_path):
+            df_verified = pd.read_csv(verified_path).fillna("")
+        else:
+            df_verified = None
 
-    # --- Load tất cả DATS (2024, 2025, 2026) và gộp thành df_dats ---
-    dats_frames = []
-    df_2026 = None
-
-    for dats_path, year_label in [(dats_2026_path, 2026), (dats_2025_path, 2025), (dats_2024_path, 2024)]:
-        if os.path.exists(dats_path):
-            _df = pd.read_csv(dats_path).fillna("")
-            _df['Năm'] = year_label
-            dats_frames.append(_df)
-            print(f"✅ [Recommender] DATS {year_label} loaded: {len(_df)} trường")
-            if year_label == 2026:
-                df_2026 = _df
-
-    if dats_frames:
-        df_dats = pd.concat(dats_frames, ignore_index=True)
-        print(f"✅ [Recommender] DATS tổng hợp: {len(df_dats)} bản ghi ({df_dats['Năm'].nunique()} năm)")
-    else:
-        df_dats = None
+        if os.path.exists(master_path):
+            df_dats = pd.read_csv(master_path).fillna("")
+        else:
+            df_dats = None
 
 except Exception as e:
     print("Lỗi load Database:", e)
     df_tuyensinh = None
     df_verified = None
-    df_2026 = None
     df_dats = None
+
+def get_verified_schools():
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            schools = [r[0] for r in conn.execute('SELECT DISTINCT "Trường" FROM diem_chuan_verified WHERE "Trường" IS NOT NULL').fetchall()]
+            conn.close()
+            return schools
+        except:
+            pass
+    if df_verified is not None and not df_verified.empty:
+        return df_verified['Trường'].dropna().unique().tolist()
+    return []
+
+def get_dats_schools():
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            schools = [r[0] for r in conn.execute('SELECT DISTINCT "Trường" FROM dats_master WHERE "Trường" IS NOT NULL').fetchall()]
+            conn.close()
+            return schools
+        except:
+            pass
+    if df_dats is not None and not df_dats.empty:
+        return df_dats['Trường'].dropna().unique().tolist()
+    return []
+
+def get_dats_school_rows(school_name):
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            df = pd.read_sql_query('SELECT * FROM dats_master WHERE "Trường" = ?', conn, params=(school_name,))
+            conn.close()
+            return df
+        except:
+            pass
+    if df_dats is not None and not df_dats.empty:
+        return df_dats[df_dats['Trường'] == school_name]
+    return pd.DataFrame()
+
+def get_verified_by_school(matched_schools):
+    if not matched_schools: return pd.DataFrame()
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            placeholders = ','.join(['?']*len(matched_schools))
+            df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Trường" IN ({placeholders})', conn, params=matched_schools)  # nosec B608
+            conn.close()
+            return df
+        except:
+            pass
+    if df_verified is not None and not df_verified.empty:
+        return df_verified[df_verified['Trường'].isin(matched_schools)].copy()
+    return pd.DataFrame()
+
+def get_verified_cross_search(code_keywords, text_keywords):
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            df = pd.DataFrame()
+            if code_keywords:
+                placeholders = ','.join(['?']*len(code_keywords))
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE "Mã ngành" IN ({placeholders})', conn, params=code_keywords)  # nosec B608
+            if df.empty and text_keywords:
+                conditions = " OR ".join(['"Tên ngành" LIKE ?' for _ in text_keywords])
+                params = [f"%{k}%" for k in text_keywords]
+                df = pd.read_sql_query(f'SELECT * FROM diem_chuan_verified WHERE {conditions}', conn, params=params)  # nosec B608
+            conn.close()
+            return df
+        except:
+            pass
+            
+    # Fallback pandas
+    vf_cross = pd.DataFrame()
+    if df_verified is not None and not df_verified.empty:
+        if code_keywords:
+            pattern = '|'.join(code_keywords)
+            vf_cross = df_verified[df_verified['Mã ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+        if vf_cross.empty and text_keywords:
+            pattern = '|'.join(text_keywords)
+            vf_cross = df_verified[df_verified['Tên ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+    return vf_cross
 
 # ======== HELPER: HYBRID SCHOOL MATCHER (BM25 + Fuzzy + Token Overlap) ========
 import math
@@ -66,7 +142,10 @@ def _normalize_school_name(name: str) -> str:
     name = re.sub(r'\s*\d{4}\s*$', '', name)
     # Bỏ ký tự đặc biệt thừa
     name = re.sub(r'[_\-]+', ' ', name)
-    # Map aliases
+    # Map aliases & abbreviations
+    name = re.sub(r'\bđh\b', 'đại học', name)
+    name = re.sub(r'\bhv\b', 'học viện', name)
+    name = re.sub(r'\bcđ\b', 'cao đẳng', name)
     name = re.sub(r'\bhn\b', 'hà nội', name)
     name = re.sub(r'\bhcm\b', 'hồ chí minh', name)
     name = re.sub(r'\btphcm\b', 'tp hồ chí minh', name)
@@ -105,7 +184,7 @@ def _token_overlap_score(query_tokens: list, school_name_lower: str) -> float:
     hits = sum(1 for kw in query_tokens if kw in school_name_lower)
     return hits / len(query_tokens)  # Chuẩn hoá về 0-1
 
-def find_matching_schools(truong_query: str, school_list: list, min_confidence: float = 0.5, strict: bool = False) -> list:
+def find_matching_schools(truong_query: str, school_list: list, min_confidence: float = 0.5, strict: bool = False, location: str = "ALL") -> list:
     """
     Hybrid School Matcher (Multi-Result): Trả về DANH SÁCH tất cả trường khớp.
     Khi người dùng hỏi 'Bách Khoa' → trả về cả Hà Nội, Đà Nẵng, TPHCM.
@@ -125,6 +204,11 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
     all_doc_tokens = [_tokenize_vn(_normalize_school_name(s)) for s in school_list]
     avg_dl = sum(len(dt) for dt in all_doc_tokens) / max(len(all_doc_tokens), 1)
 
+    # Chuẩn hóa location để buff điểm
+    loc_norm = ""
+    if location != "ALL":
+        loc_norm = _normalize_school_name(location)
+
     scored = []
     for i, school in enumerate(school_list):
         school_normalized = _normalize_school_name(school)
@@ -134,6 +218,11 @@ def find_matching_schools(truong_query: str, school_list: list, min_confidence: 
         s_fuzzy = _fuzzy_score(query_normalized, school_normalized)
         s_token = _token_overlap_score(query_tokens, school_normalized)
         combined = (s_bm25 * 0.4) + (s_fuzzy * 0.3) + (s_token * 0.3)
+
+        # Buff điểm nếu có location và location khớp một phần vào tên trường
+        if loc_norm and loc_norm in school_normalized:
+            combined += 1.0  # Buff cực mạnh để leo lên Top 1
+            print(f"DEBUG [Matcher]: Buffed {school} by 1.0 due to location '{loc_norm}'")
 
         scored.append((school, combined, s_bm25, s_fuzzy, s_token))
 
@@ -272,7 +361,7 @@ def _build_structured_response(dataframe: pd.DataFrame, prefix: str, messages: l
     }
 
 
-def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False):
+def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_location: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0, stream_output: bool = False):
     if df_tuyensinh is None or df_tuyensinh.empty:
         return "⚠️ Dữ liệu tuyển sinh chưa sẵn sàng. Hãy đảm bảo file tiến trình ETL đã cào dữ liệu thành công."
 
@@ -285,15 +374,15 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
 
     # ======== GUARD 0: KIỂM TRA ĐA TRƯỜNG — PHẢI TRƯỚC MỌI LOOKUP ========
     # Dùng verified DB (290 trường) để phát hiện ambiguity
-    if df_verified is not None and not df_verified.empty and truong != "ALL":
-        all_schools = df_verified['Trường'].dropna().unique().tolist()
-        all_matches = find_matching_schools(truong, all_schools)
+    all_schools = get_verified_schools()
+    if all_schools and truong != "ALL":
+        all_matches = find_matching_schools(truong, all_schools, location=pre_extracted_location)
 
         # Nếu nhiều trường khớp → HỎI LẠI, không đoán mò
         if len(all_matches) > 1:
             school_list_str = "\n".join([f"  {i+1}. **{s}**" for i, s in enumerate(all_matches)])
             return (
-                f"🤖 **[Recommender Agent]**\n\n"
+                f"**[Recommender Agent]**\n\n"
                 f"Tôi tìm thấy **{len(all_matches)} trường** khớp với từ khóa **\"{truong}\"**:\n\n"
                 f"{school_list_str}\n\n"
                 f"👉 Bạn muốn xem thông tin trường nào? Hãy gõ tên cụ thể hơn nhé! "
@@ -305,35 +394,33 @@ def query_diem_chuan(user_query: str, pre_extracted_school: str = "ALL", pre_ext
     has_specific_keyword = tu_khoa != "ALL" and not any(m in tu_khoa.lower() for m in ['điểm', 'chuẩn'])
     if truong == "ALL" and has_specific_keyword and df_verified is not None and not df_verified.empty:
         major_keywords = [kw.strip() for kw in tu_khoa.split('|') if kw.strip()]
-        code_keywords = [kw for kw in major_keywords if kw.isdigit()]
-        text_keywords = [kw for kw in major_keywords if not kw.isdigit()]
+        code_keywords = [kw for kw in major_keywords if re.search(r'\d{5,}', kw)]
+        text_keywords = [kw for kw in major_keywords if kw not in code_keywords]
 
-        vf_cross = pd.DataFrame()
-        if code_keywords:
-            pattern = '|'.join(code_keywords)
-            vf_cross = df_verified[df_verified['Mã ngành'].astype(str).str.contains(pattern, case=False, na=False)]
-        if vf_cross.empty and text_keywords:
-            pattern = '|'.join(text_keywords)
-            vf_cross = df_verified[df_verified['Tên ngành'].astype(str).str.contains(pattern, case=False, na=False)]
+        vf_cross = get_verified_cross_search(code_keywords, text_keywords)
 
         if not vf_cross.empty:
-            # Lọc theo năm nếu chỉ định
-            if nam > 0 and 'Năm' in vf_cross.columns:
-                vf_cross_year = vf_cross[pd.to_numeric(vf_cross['Năm'], errors='coerce').fillna(0) == nam]
-                if not vf_cross_year.empty:
-                    vf_cross = vf_cross_year
+            # Lọc theo năm: VÒNG LẶP 2026 → 2025 → 2024
+            if 'Năm' in vf_cross.columns:
+                vf_cross_nums = pd.to_numeric(vf_cross['Năm'], errors='coerce').fillna(0)
+                if nam > 0:
+                    cross_year_priority = [nam] + [y for y in [2026, 2025, 2024] if y != nam]
                 else:
-                    latest = pd.to_numeric(vf_cross['Năm'], errors='coerce').max()
-                    if latest > 0:
-                        vf_cross = vf_cross[pd.to_numeric(vf_cross['Năm'], errors='coerce') == latest]
+                    cross_year_priority = [2026, 2025, 2024]
+                
+                for try_year in cross_year_priority:
+                    vf_cross_year = vf_cross[vf_cross_nums == try_year]
+                    if not vf_cross_year.empty:
+                        vf_cross = vf_cross_year
+                        print(f"DEBUG [Recommender Cross]: Found data for year {try_year}")
+                        break
 
             # Bỏ cột trống
             vf_cross = vf_cross.replace('', pd.NA).dropna(axis=1, how='all')
 
             # SẮP XẾP theo Điểm chuẩn GIẢM DẦN + ĐA DẠNG HOÁ trường
-            if 'Điểm chuẩn' in vf_cross.columns:
-                vf_cross['_score'] = pd.to_numeric(vf_cross['Điểm chuẩn'], errors='coerce').fillna(0)
-                vf_cross = vf_cross.sort_values('_score', ascending=False)
+            if 'Điểm chuẩn_Num' in vf_cross.columns:
+                vf_cross = vf_cross.sort_values('Điểm chuẩn_Num', ascending=False)
 
                 # Lấy dòng điểm cao nhất của MỖI trường (đa dạng kết quả)
                 vf_cross_top = vf_cross.drop_duplicates(subset=['Trường'], keep='first')
@@ -378,7 +465,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời."""
 
             llm_messages_cross = [{"role": "user", "content": llm_prompt_cross}]
-            prefix_cross = f"🤖 **[Recommender Agent]** — Tìm kiếm chéo: **{tu_khoa}** · {vf_cross['Trường'].nunique()} trường\n\n"
+            prefix_cross = f"**[Recommender Agent]** — Tìm kiếm chéo: **{tu_khoa}** · {vf_cross['Trường'].nunique()} trường\n\n"
             suffix_cross = f"\n\n---\n*Dữ liệu chính thức{f' năm {data_year_val}' if data_year_val else ''}, đã kiểm chứng chính xác.*"
 
             print(f"DEBUG [Recommender]: Cross-school search for '{tu_khoa}' → {len(vf_cross)} rows, {vf_cross['Trường'].nunique()} schools")
@@ -404,17 +491,20 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if llm_error_info:
                 return f"{prefix_cross}{llm_error_info['message']}"
 
-    # ======== QUYẾT ĐỊNH DỮ LIỆU: 2026 DATS hay 2025 ĐIỂM CHUẨN? ========
-    # Câu hỏi về "điểm chuẩn" → ưu tiên 2025 verified (có số liệu thực)
-    # Câu hỏi về "tuyển sinh/phương thức/chỉ tiêu/ngành" → ưu tiên 2026 DATS
+    # ======== QUYẾT ĐỊNH DỮ LIỆU: TÌM KIẾM TOÀN BỘ 3 NĂM ========
+    # Luồng: DATS (2026→2025→2024) → Verified DB → OCR
+    # CHỈ trả lời "không có dữ liệu" khi ĐÃ TÌM HẾT TẤT CẢ data sources
     query_lower = user_query.lower()
     is_score_query = any(kw in query_lower for kw in ['điểm chuẩn', 'điểm', 'bao nhiêu điểm', 'điểm trúng tuyển'])
-    is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký', 'học phí', 'ngành'])
+    is_admission_query = any(kw in query_lower for kw in ['tuyển sinh', 'phương thức', 'chỉ tiêu', 'xét tuyển', 'điều kiện', 'hồ sơ', 'đăng ký', 'học phí', 'ngành', 'học bổng', 'ký túc'])
+
+    # Flag theo dõi: đã tìm thấy và trả lời từ nguồn nào chưa?
+    dats_answered = False
 
     # ======== BƯỚC 1: TRA CỨU DATS — TỰ ĐỘNG TÌM NĂM CÓ DỮ LIỆU PHÙ HỢP ========
-    # Quy tắc MỚI: Nếu năm target không có thông tin user hỏi → TỰ ĐỘNG tìm năm khác có dữ liệu.
-    # Không bắt user hỏi lại — proactively tìm và trả lời luôn.
-    if df_dats is not None and not df_dats.empty and truong != "ALL" and (is_admission_query or not is_score_query):
+    # Luôn thử DATS trước cho MỌI loại câu hỏi (admission + score)
+    list_check = get_dats_schools()
+    if list_check and truong != "ALL":
 
         # Xác định năm tìm kiếm
         if nam > 0:
@@ -422,45 +512,52 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         else:
             target_year = 2026
 
-        # Kiểm tra trường này có dữ liệu trong năm nào
+        # Tìm trường trong DATS Master
+        exact_dats = [s for s in list_check if s == truong]
+        if exact_dats:
+            matched_check = exact_dats
+        else:
+            matched_check = find_matching_schools(truong, list_check, strict=True, location=pre_extracted_location)
+            
         available_years = []
-        for check_year in [2026, 2025, 2024]:
-            df_check = df_dats[df_dats['Năm'] == check_year]
-            if df_check.empty:
-                continue
-            list_check = df_check['Trường'].dropna().unique().tolist()
-            matched_check = find_matching_schools(truong, list_check, strict=False)
-            if len(matched_check) == 1:
-                available_years.append((check_year, matched_check[0]))
+        best_match = None
+        if len(matched_check) == 1:
+            s = matched_check[0]
+            school_rows = get_dats_school_rows(s)
+            
+            for _, r in school_rows.iterrows():
+                available_years.append((r['Năm'], s))
+            
+            # === VÒNG LẶP TÌM NĂM: target → 2026 → 2025 → 2024 ===
+            # Xây dựng danh sách năm ưu tiên: bắt đầu từ năm user yêu cầu (hoặc 2026), giảm dần
+            if nam > 0:
+                year_priority = [nam] + [y for y in [2026, 2025, 2024] if y != nam]
+            else:
+                year_priority = [2026, 2025, 2024]
+            
+            for try_year in year_priority:
+                target_row = school_rows[school_rows['Năm'] == try_year]
+                if not target_row.empty and len(str(target_row.iloc[0].get('Nội dung', ''))) >= 50:
+                    best_match = (try_year, s, target_row.iloc[0].get('Nội dung', ''))
+                    print(f"DEBUG [Recommender]: Found '{s}' in DATS Master (year {try_year})")
+                    break
+            
+            if not best_match:
+                print(f"DEBUG [Recommender]: No valid DATS content for '{s}' in years {year_priority}")
 
-        print(f"DEBUG [Recommender]: Available years for '{truong}': {[(y, s) for y, s in available_years]}")
-
-        # --- Helper: Kiểm tra nội dung có chứa chủ đề user hỏi không ---
-        def _content_has_topic(content: str, query_lc: str) -> bool:
-            """Kiểm tra nhanh xem nội dung DATS có chứa thông tin liên quan đến chủ đề user hỏi."""
-            if not content:
-                return False
-            content_lc = content.lower()
-            topic_keywords_map = {
-                'học phí': ['học phí', 'mức phí', 'chi phí đào tạo', 'tín chỉ'],
-                'chỉ tiêu': ['chỉ tiêu', 'tổng chỉ tiêu'],
-                'học bổng': ['học bổng', 'miễn giảm'],
-                'ký túc': ['ký túc', 'ktx', 'nội trú'],
-                'điều kiện': ['điều kiện', 'yêu cầu'],
-            }
-            for topic, keywords in topic_keywords_map.items():
-                if topic in query_lc:
-                    return any(kw in content_lc for kw in keywords)
-            # Nếu không match topic cụ thể → coi như có dữ liệu (general query)
-            return True
-
-        # --- Helper: Smart content extraction ---
+        # --- Helper: Smart Hybrid Chunker ---
         def _extract_content_for_llm(content: str, query_lc: str) -> str:
-            """Trích xuất phần nội dung liên quan từ DATS content dài."""
+            """
+            Trích xuất phần nội dung liên quan từ DATS content dài bằng kỹ thuật Hybrid Chunking:
+            Tầng 1: Structural Chunking (Cắt theo Header/Tiêu đề)
+            Tầng 2: Recursive Character Splitter (Cắt theo đoạn văn, câu) để làm fallback
+            """
             if len(content) <= 8000:
                 return content
+            
             search_keywords = []
             kw_extract_map = {
+                'vị trí': ['địa chỉ', 'cơ sở', 'khu', 'trụ sở', 'vị trí', 'phân hiệu'],
                 'học phí': ['học phí', 'mức phí', 'chi phí đào tạo', 'tín chỉ'],
                 'chỉ tiêu': ['chỉ tiêu', 'tổng chỉ tiêu'],
                 'phương thức': ['phương thức', 'xét tuyển'],
@@ -472,80 +569,122 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             for kw, patterns in kw_extract_map.items():
                 if kw in query_lc:
                     search_keywords.extend(patterns)
-            if search_keywords:
-                content_lower = content.lower()
-                best_pos = -1
-                for sk in search_keywords:
-                    pos = content_lower.find(sk)
-                    if pos >= 0 and (best_pos < 0 or pos < best_pos):
-                        best_pos = pos
-                if best_pos >= 0:
-                    intro = content[:1500]
-                    start = max(0, best_pos - 500)
-                    end = min(len(content), best_pos + 9500)
-                    relevant_section = content[start:end]
-                    print(f"DEBUG [Recommender]: Extracted relevant section around '{search_keywords[0]}' (pos={best_pos})")
-                    return intro + "\n\n[...]\n\n" + relevant_section
-            return content[:8000]
+            
+            if not search_keywords:
+                return content[:8000]
 
-        # --- Tìm năm phù hợp nhất: ưu tiên target_year, fallback sang năm khác nếu không có topic ---
-        best_match = None  # (year, school_name, content)
+            content_lower = content.lower()
+            best_pos = -1
+            found_kw = ""
+            for sk in search_keywords:
+                pos = content_lower.find(sk)
+                # Bỏ qua các match quá sớm (thường là ở Mục lục)
+                if pos > 1000 and (best_pos < 0 or pos < best_pos):
+                    best_pos = pos
+                    found_kw = sk
 
-        # Bước 1: Thử target_year trước
-        for y, s in available_years:
-            if y == target_year:
-                row = df_dats[(df_dats['Năm'] == y) & (df_dats['Trường'] == s)].iloc[0]
-                content = row.get('Nội dung', '')
-                if content and len(content) >= 50:
-                    if _content_has_topic(content, query_lower):
-                        best_match = (y, s, content)
-                        print(f"DEBUG [Recommender]: Target year {y} HAS topic → using it")
-                    else:
-                        print(f"DEBUG [Recommender]: Target year {y} MISSING topic → will try other years")
-                break
+            if best_pos < 0:
+                 return content[:8000]
 
-        # Bước 2: Nếu target_year không có topic → tự động tìm năm khác
-        if best_match is None:
-            for y, s in available_years:
-                if y == target_year:
-                    continue  # Đã check rồi
-                row = df_dats[(df_dats['Năm'] == y) & (df_dats['Trường'] == s)].iloc[0]
-                content = row.get('Nội dung', '')
-                if content and len(content) >= 50 and _content_has_topic(content, query_lower):
-                    best_match = (y, s, content)
-                    print(f"DEBUG [Recommender]: Fallback year {y} HAS topic → using it")
-                    break
+            print(f"DEBUG [Recommender]: Found keyword '{found_kw}' at pos={best_pos}")
 
-        # Bước 3: Nếu vẫn không có topic ở bất kỳ năm nào → dùng target_year (hoặc năm đầu tiên)
-        if best_match is None:
-            for y, s in available_years:
-                row = df_dats[(df_dats['Năm'] == y) & (df_dats['Trường'] == s)].iloc[0]
-                content = row.get('Nội dung', '')
-                if content and len(content) >= 50:
-                    best_match = (y, s, content)
-                    print(f"DEBUG [Recommender]: No year has topic, using first available: {y}")
-                    break
+            # --- Tầng 1: Structural Split (Chia theo Header) ---
+            # Bắt các pattern như: "1.", "I.", "PHẦN I", "Điều 1."
+            # Vì text OCR có thể bị dính nhau, ta chia section dựa vào newline và pattern
+            import re
+            header_pattern = re.compile(r'\n\s*(?:[IVXLCDM]+|[0-9]+)\s*[\.\:\)]\s*[A-ZĐ]', re.MULTILINE)
+            headers = [(m.start(), m.end()) for m in header_pattern.finditer(content)]
+            
+            chunk_start = 0
+            chunk_end = len(content)
+            
+            if headers:
+                # Tìm header ngay trước best_pos
+                for i, (h_start, h_end) in enumerate(headers):
+                    if h_start <= best_pos:
+                        chunk_start = h_start
+                        if i + 1 < len(headers):
+                            chunk_end = headers[i+1][0]
+                        else:
+                            chunk_end = len(content)
+                
+            # --- Tầng 2: Recursive Character Fallback ---
+            # Nếu chunk tìm được quá to (> 10000) HOẶC không tìm thấy header,
+            # Fallback: Cắt xung quanh best_pos nhưng NGHIÊM NGẶT dựa trên dấu câu
+            chunk_length = chunk_end - chunk_start
+            if not headers or chunk_length > 10000:
+                print(f"DEBUG [Recommender]: Structural Chunking failed or chunk too large ({chunk_length} chars). Fallback to Recursive Split.")
+                # Lấy một window rộng (khoảng 8000 chars) xung quanh từ khóa
+                raw_start = max(0, best_pos - 1000)
+                raw_end = min(len(content), best_pos + 7000)
+                
+                # Tinh chỉnh raw_start bằng cách tìm \n\n, \n, hoặc dấu chấm (.) gần đó
+                safe_start = content.rfind('\n\n', 0, raw_start)
+                if safe_start == -1: safe_start = content.rfind('\n', 0, raw_start)
+                if safe_start == -1: safe_start = content.rfind('.', 0, raw_start) + 1
+                if safe_start < 0: safe_start = raw_start
+                
+                # Tinh chỉnh raw_end tương tự
+                safe_end = content.find('\n\n', raw_end)
+                if safe_end == -1: safe_end = content.find('\n', raw_end)
+                if safe_end == -1: safe_end = content.find('.', raw_end) + 1
+                if safe_end <= 0: safe_end = raw_end
+                
+                chunk_start = safe_start
+                chunk_end = safe_end
+
+            relevant_section = content[chunk_start:chunk_end].strip()
+            
+            intro = content[:1500]
+            # Tránh trùng lặp nếu section đã bao gồm cả intro
+            if chunk_start < 1500:
+                return relevant_section
+                
+            return intro + "\n\n[...]\n\n" + relevant_section
 
         if best_match:
             search_year, school_found, content_found = best_match
             fell_back = (search_year != target_year)
 
-            print(f"DEBUG [Recommender]: Using DATS {search_year} for '{school_found}' ({len(content_found)} chars), fallback={fell_back}")
+            # === SMART SOURCE ROUTING: Ưu tiên Verified DB cho câu hỏi cần dữ liệu có cấu trúc ===
+            # DATS = PDF đề án tuyển sinh (free-text) → tốt cho: phương thức, học phí, chỉ tiêu, điều kiện
+            # Verified DB = bảng CSV có cấu trúc → tốt cho: danh sách ngành, điểm chuẩn, mã ngành, tổ hợp
+            structured_query_keywords = [
+                'ngành nào', 'những ngành', 'danh sách ngành', 'các ngành', 'có ngành',
+                'điểm chuẩn', 'bao nhiêu điểm', 'điểm trúng tuyển',
+                'mã ngành', 'tổ hợp', 'khối thi', 'xét tuyển ngành',
+            ]
+            is_structured_query = any(kw in query_lower for kw in structured_query_keywords)
+            
+            prefer_verified = False
+            verified_schools_list = get_verified_schools()
+            if is_structured_query and verified_schools_list:
+                exact_vf = [s for s in verified_schools_list if s == school_found]
+                if not exact_vf:
+                    exact_vf = find_matching_schools(school_found, verified_schools_list, strict=True, location=pre_extracted_location)
+                if exact_vf:
+                    prefer_verified = True
+                    print(f"DEBUG [Recommender]: Structured query detected → skipping DATS, preferring Verified DB for '{school_found}'")
+            
+            if prefer_verified:
+                # Không return ở đây → để code chạy xuống Bước 2 (Verified DB) bên dưới
+                pass
+            else:
+                print(f"DEBUG [Recommender]: Using DATS {search_year} for '{school_found}' ({len(content_found)} chars), fallback={fell_back}")
 
-            content_for_llm = _extract_content_for_llm(content_found, query_lower)
+                content_for_llm = _extract_content_for_llm(content_found, query_lower)
 
-            # Thông báo các năm khác có dữ liệu
-            other_years = [str(y) for y, s in available_years if y != search_year]
-            other_years_note = ""
-            if other_years:
-                other_years_note = f"\n💡 Trường này cũng có dữ liệu năm: **{', '.join(other_years)}**. Hãy hỏi kèm năm cụ thể nếu bạn muốn xem."
+                # Thông báo các năm khác có dữ liệu
+                other_years_note = ""
+                if fell_back:
+                    other_years_note = f"\n💡 *Trường này hiện không có dữ liệu cho năm {target_year}, hệ thống đang dùng dữ liệu mới nhất (năm {search_year}).*"
 
-            # Ghi chú fallback nếu đã chuyển năm
-            fallback_note = ""
-            if fell_back:
-                fallback_note = f"\n⚠️ Dữ liệu năm {target_year} không có thông tin về chủ đề này. Hệ thống đã tự động tìm và sử dụng dữ liệu **năm {search_year}**."
+                # Ghi chú fallback nếu đã chuyển năm
+                fallback_note = ""
+                if fell_back:
+                    fallback_note = f"\n⚠️ Dữ liệu năm {target_year} không có thông tin về chủ đề này. Hệ thống đã tự động tìm và sử dụng dữ liệu **năm {search_year}**."
 
-            llm_prompt_dats = f"""Bạn là trợ lý tuyển sinh AI chuyên nghiệp cho Việt Nam.
+                llm_prompt_dats = f"""Bạn là trợ lý tuyển sinh AI chuyên nghiệp cho Việt Nam.
 
 CÂU HỎI CỦA NGƯỜI DÙNG: "{user_query}"
 
@@ -553,52 +692,55 @@ THÔNG TIN TUYỂN SINH NĂM {search_year} CỦA TRƯỜNG {school_found}:
 {content_for_llm}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
-4. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} không có thông tin về [chủ đề]."
-5. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí. TUYỆT ĐỐI KHÔNG cắt ngắn.
-6. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
-7. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
-8. KHÔNG hiển thị cột trống.
-9. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời (VD: phương thức xét tuyển, điểm chuẩn, chỉ tiêu, ngành đào tạo)."""
-            dats_prefix = f"🤖 **[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
-            if fell_back:
-                dats_prefix += f"{fallback_note}\n\n"
-            dats_messages = [{"role": "user", "content": llm_prompt_dats}]
-            dats_suffix = f"{other_years_note}\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm {search_year}.*"
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận, KHÔNG bịa số liệu.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG liệt kê thông tin thừa.
+3. Khi trích dẫn SỐ LIỆU (học phí, chỉ tiêu, mã ngành, điểm), phải GHI ĐÚNG CON SỐ từ dữ liệu gốc. Nếu dữ liệu ghi "28,700,000 VNĐ" thì phải ghi đúng "28,700,000 VNĐ".
+4. BẮT BUỘC ghi rõ năm **{search_year}** trong tiêu đề.
+5. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu năm {search_year} của trường này không có thông tin về [chủ đề]."
+6. Nếu hỏi về học phí → tạo BẢNG MARKDOWN ĐẦY ĐỦ, GHI RÕ mức phí đúng nguyên văn từ dữ liệu.
+7. Nếu hỏi về phương thức → liệt kê chi tiết. Nếu hỏi về ngành → liệt kê đầy đủ ngành, mã ngành.
+8. Sử dụng Markdown (bảng, in đậm). Trả lời tiếng Việt, chuyên nghiệp.
+9. KHÔNG hiển thị cột trống.
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ liên quan đến trường {school_found} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
+                dats_prefix = f"**[Recommender Agent]** — Trường: **{school_found}** · Năm: **{search_year}**\n\n"
+                if fell_back:
+                    dats_prefix += f"{fallback_note}\n\n"
+                dats_messages = [{"role": "user", "content": llm_prompt_dats}]
+                dats_suffix = f"{other_years_note}\n\n---\n*Nguồn: Đề án tuyển sinh chính thức năm {search_year}.*"
 
-            if stream_output:
-                return _stream_llm_response(
-                    prefix=dats_prefix,
+                if stream_output:
+                    return _stream_llm_response(
+                        prefix=dats_prefix,
+                        messages=dats_messages,
+                        temperature=0.0,
+                        max_tokens=4096,
+                        suffix=dats_suffix,
+                    )
+
+                llm_answer, llm_error_info = call_llm(
                     messages=dats_messages,
+                    model_list=OPENROUTER_FALLBACK_MODELS,
                     temperature=0.0,
                     max_tokens=4096,
-                    suffix=dats_suffix,
                 )
-
-            llm_answer, llm_error_info = call_llm(
-                messages=dats_messages,
-                model_list=OPENROUTER_FALLBACK_MODELS,
-                temperature=0.0,
-                max_tokens=4096,
-            )
-            if llm_answer:
-                return f"{dats_prefix}{llm_answer}{dats_suffix}"
-            if llm_error_info:
-                return (
-                    f"{dats_prefix}"
-                    f"{llm_error_info['message']}\n\n"
-                    f"Tôi đã tìm thấy dữ liệu tuyển sinh năm {search_year} của trường này, nhưng hiện chưa thể tổng hợp bằng AI. "
-                    f"Vui lòng thử lại sau vài phút."
-                )
+                if llm_answer:
+                    dats_answered = True
+                    return f"{dats_prefix}{llm_answer}{dats_suffix}"
+                if llm_error_info:
+                    dats_answered = True
+                    return (
+                        f"{dats_prefix}"
+                        f"{llm_error_info['message']}\n\n"
+                        f"Tôi đã tìm thấy dữ liệu tuyển sinh năm {search_year} của trường này, nhưng hiện chưa thể tổng hợp bằng AI. "
+                        f"Vui lòng thử lại sau vài phút."
+                    )
 
         elif available_years:
             # Không có dữ liệu nào đủ dài → NÓI RÕ + gợi ý năm khác
             other_info = "\n".join([f"  - **Năm {y}**: {s}" for y, s in available_years])
             first_year, first_school = available_years[0]
             return (
-                f"🤖 **[Recommender Agent]**\n\n"
+                f"**[Recommender Agent]**\n\n"
                 f"⚠️ **Trường \"{truong}\" chưa có dữ liệu tuyển sinh năm {target_year}** trong hệ thống.\n\n"
                 f"Tuy nhiên, tôi tìm thấy dữ liệu của trường này ở các năm khác:\n\n"
                 f"{other_info}\n\n"
@@ -606,9 +748,14 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             )
 
     # ======== BƯỚC 2: TRA CỨU DỮ LIỆU ĐIỂM CHUẨN 2025 (VERIFIED DATABASE) ========
-    if df_verified is not None and not df_verified.empty and truong != "ALL":
-        list_of_verified_schools = df_verified['Trường'].dropna().unique().tolist()
-        matched_schools = find_matching_schools(truong, list_of_verified_schools)
+    list_of_verified_schools = get_verified_schools()
+    if list_of_verified_schools and truong != "ALL":
+        # Exact match priority: nếu truong đã được resolve bởi Guard 0 → match chính xác
+        exact_verified = [s for s in list_of_verified_schools if s == truong]
+        if exact_verified:
+            matched_schools = exact_verified
+        else:
+            matched_schools = find_matching_schools(truong, list_of_verified_schools, location=pre_extracted_location)
 
         print(f"DEBUG [Recommender]: Matched {len(matched_schools)} schools: {matched_schools}")
 
@@ -618,7 +765,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         if not matched_schools:
             vf_school = pd.DataFrame()
         else:
-            vf_school = df_verified[df_verified['Trường'].isin(matched_schools)].copy()
+            vf_school = get_verified_by_school(matched_schools)
 
         if not vf_school.empty:
             # --- Lọc theo ngành nếu user chỉ định ---
@@ -627,8 +774,8 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
 
             if has_specific_major:
                 major_keywords = [kw.strip() for kw in tu_khoa.split('|') if kw.strip()]
-                code_keywords = [kw for kw in major_keywords if kw.isdigit()]
-                text_keywords = [kw for kw in major_keywords if not kw.isdigit()]
+                code_keywords = [kw for kw in major_keywords if re.search(r'\d{5,}', kw)]
+                text_keywords = [kw for kw in major_keywords if kw not in code_keywords]
 
                 if code_keywords:
                     major_pattern = '|'.join(code_keywords)
@@ -643,16 +790,38 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             if vf_match.empty:
                 vf_match = vf_school
 
-            # --- Lọc theo năm ---
-            if nam > 0 and 'Năm' in vf_match.columns:
+            # --- Lọc theo năm: VÒNG LẶP 2026 → 2025 → 2024 ---
+            year_fallback_note = ""
+            if 'Năm' in vf_match.columns:
                 vf_match.loc[:, 'Năm_Num'] = pd.to_numeric(vf_match['Năm'], errors='coerce').fillna(0)
-                vf_match_year = vf_match[vf_match['Năm_Num'] == nam]
-                if not vf_match_year.empty:
-                    vf_match = vf_match_year
+                
+                # Xây dựng danh sách năm ưu tiên (giống logic DATS)
+                if nam > 0:
+                    vf_year_priority = [nam] + [y for y in [2026, 2025, 2024] if y != nam]
                 else:
+                    vf_year_priority = [2026, 2025, 2024]
+                
+                found_year = None
+                for try_year in vf_year_priority:
+                    vf_match_year = vf_match[vf_match['Năm_Num'] == try_year]
+                    if not vf_match_year.empty:
+                        found_year = try_year
+                        vf_match = vf_match_year
+                        print(f"DEBUG [Recommender Verified]: Found data for year {try_year}")
+                        break
+                
+                if found_year is None:
+                    # Không có năm nào trong [2026,2025,2024] → lấy max
                     latest_year = vf_match['Năm_Num'].max()
                     if latest_year > 0:
+                        found_year = int(latest_year)
                         vf_match = vf_match[vf_match['Năm_Num'] == latest_year]
+                
+                # Ghi chú fallback nếu năm tìm được khác năm user yêu cầu
+                requested = nam if nam > 0 else 2026
+                if found_year and found_year != requested:
+                    year_fallback_note = f"\n\n⚠️ *Dữ liệu năm {requested} chưa có. Hệ thống tự động sử dụng dữ liệu năm {int(found_year)} (năm gần nhất có sẵn).*"
+                
                 vf_match = vf_match.drop(columns=['Năm_Num'], errors='ignore')
 
             if not vf_match.empty:
@@ -690,16 +859,16 @@ DỮ LIỆU CHÍNH THỨC CỦA TRƯỜNG {school_name} (dạng CSV):
 THỐNG KÊ: {stats}
 
 QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
-1. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. TUYỆT ĐỐI KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
-2. Dựa HOÀN TOÀN trên dữ liệu trên. TUYỆT ĐỐI KHÔNG bịa thông tin.
-3. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường — mọi phương thức xét tuyển đều do trường công bố.
-4. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
-5. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm chính xác theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
-6. Nếu hỏi chung chung → tóm tắt ngắn gọn.
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU CSV ở trên. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng, KHÔNG suy luận thêm, KHÔNG bịa thông tin.
+2. Trả lời ĐÚNG TRỌNG TÂM câu hỏi. KHÔNG lan man, KHÔNG đưa thông tin thừa không liên quan đến câu hỏi.
+3. Khi trích dẫn ĐIỂM CHUẨN, phải GHI ĐÚNG CON SỐ từ cột "Điểm chuẩn" trong CSV. VD: nếu CSV ghi 25.5 thì trả lời 25.5, KHÔNG làm tròn. Dữ liệu trên là DỮ LIỆU CHÍNH THỨC từ trường.
+4. Nếu hỏi về điểm chuẩn ngành cụ thể → cho điểm CHÍNH XÁC theo từng phương thức. KHÔNG liệt kê tất cả ngành khác.
+5. Nếu hỏi về phương thức → liệt kê CÁC PHƯƠNG THỨC và số ngành áp dụng.
+6. Nếu hỏi chung chung → tóm tắt ngắn gọn dựa trên thống kê.
 {table_rule}
 8. BẮT BUỘC ghi rõ NĂM CỤ THỂ của dữ liệu (VD: "Điểm chuẩn **năm 2025**").
-9. Nếu người dùng hỏi thông tin KHÔNG CÓ trong dữ liệu → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
-10. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời (VD: điểm chuẩn ngành X, phương thức xét tuyển, so sánh điểm chuẩn năm trước)."""
+9. Nếu dữ liệu CSV KHÔNG CÓ thông tin user hỏi → nói rõ "Dữ liệu hiện tại chưa có thông tin về [chủ đề]." TUYỆT ĐỐI KHÔNG tự ý liệt kê thông tin thay thế khi người dùng không hỏi.
+10. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ cho trường {school_name} mà hệ thống có dữ liệu. Gợi ý phải PHÙ HỢP với nhu cầu ban đầu của người dùng."""
 
                 # === Gọi LLM: thử model chính → model dự phòng → smart fallback ===
                 llm_messages = [{"role": "user", "content": llm_prompt}]
@@ -708,7 +877,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 if stream_output:
                     return _build_structured_response(
                         dataframe=data_sample[export_cols],
-                        prefix=f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
+                        prefix=f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n",
                         messages=llm_messages,
                         temperature=0.1,
                         max_tokens=3000,
@@ -725,7 +894,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     print("DEBUG [Recommender]: LLM OK")
 
                 if llm_answer:
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{year_fallback_note}{llm_answer}\n\n---\n*Dữ liệu chính thức năm {data_year}, đã kiểm chứng chính xác.*"
 
                 # === SMART FALLBACK: Không dùng LLM, phân tích bằng Pandas ===
                 print("DEBUG [Recommender]: All LLM models failed, using smart fallback")
@@ -735,7 +904,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                 # Nếu người dùng hỏi "chỉ tiêu" nhưng dữ liệu chỉ có "điểm chuẩn"
                 if 'chỉ tiêu' in query_lower and 'Chỉ tiêu' not in vf_match.columns:
                     return (
-                        f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                        f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
                         f"{ai_warning}"
                         f"Rất tiếc, dữ liệu hiện tại của trường này chỉ lưu trữ thông tin về **điểm chuẩn** và **phương thức xét tuyển**, chưa có thông tin về **chỉ tiêu**.\n\n"
                         f"👉 Bạn có thể hỏi tôi về điểm chuẩn của các ngành thay thế nhé!"
@@ -751,27 +920,77 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
                     table = "| Phương thức | Số ngành | Điểm thấp nhất | Điểm cao nhất |\n|---|---|---|---|\n"
                     for _, r in methods.iterrows():
                         table += f"| **{r['Phương thức xét tuyển']}** | {r['Số_ngành']} | {r['Điểm_thấp']} | {r['Điểm_cao']} |\n"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Các phương thức xét tuyển\n\n{table}"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Các phương thức xét tuyển\n\n{table}"
 
                 # Ngành nào điểm cao/thấp nhất
                 if any(kw in query_lower for kw in ['cao nhất', 'thấp nhất', 'top']):
-                    sorted_df = vf_match.sort_values('Điểm chuẩn', ascending='thấp' in query_lower).head(10)
+                    sort_col = 'Điểm chuẩn_Num' if 'Điểm chuẩn_Num' in vf_match.columns else 'Điểm chuẩn'
+                    sorted_df = vf_match.sort_values(sort_col, ascending='thấp' in query_lower).head(10)
                     table = "| Tên ngành | Phương thức | Điểm chuẩn |\n|---|---|---|\n"
                     for _, r in sorted_df.iterrows():
                         table += f"| {r['Tên ngành']} | {r['Phương thức xét tuyển']} | **{r['Điểm chuẩn']}** |\n"
                     label = "thấp nhất" if 'thấp' in query_lower else "cao nhất"
-                    return f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
+                    return f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n{ai_warning}### Top 10 ngành điểm {label}\n\n{table}"
 
                 # Fallback cuối: tóm tắt thống kê
                 total = vf_match['Tên ngành'].nunique()
                 methods_list = ", ".join(vf_match['Phương thức xét tuyển'].unique().tolist())
                 return (
-                    f"🤖 **[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
+                    f"**[Recommender Agent]** — Trường: **{school_name}** · Năm: **{data_year}**\n\n"
                     f"{ai_warning}"
                     f"Trường có **{total} ngành** tuyển sinh theo phương thức: {methods_list}.\n\n"
                     f"👉 Hãy hỏi cụ thể hơn để tôi cung cấp thông tin chính xác!\n"
                     f"VD: *\"điểm chuẩn ngành CNTT {school_name}\"* hoặc *\"phương thức tuyển sinh {school_name}\"*"
                 )
+
+    # ======== GENERAL INFO FALLBACK — Vị trí, địa chỉ, thông tin chung ========
+    # Khi trường đã được xác định nhưng KHÔNG CÓ trong DATS/Verified → dùng LLM kiến thức chung
+    # CHỈ áp dụng cho câu hỏi KHÔNG cần dữ liệu chính xác (vị trí, lịch sử, cơ sở vật chất...)
+    general_info_keywords = ['vị trí', 'ở đâu', 'địa chỉ', 'cơ sở', 'campus', 'trụ sở',
+                             'thành lập', 'lịch sử', 'giới thiệu', 'tổng quan']
+    is_general_info_query = truong != "ALL" and any(kw in query_lower for kw in general_info_keywords)
+
+    if is_general_info_query:
+        general_prompt = f"""Bạn là trợ lý tuyển sinh AI chuyên nghiệp cho Việt Nam.
+
+CÂU HỎI CỦA NGƯỜI DÙNG: "{user_query}"
+TRƯỜNG ĐƯỢC HỎI: "{truong}"
+
+QUY TẮC TRẢ LỜI:
+1. Trả lời NGẮN GỌN, ĐÚNG TRỌNG TÂM câu hỏi dựa trên kiến thức chung.
+2. Nếu hỏi về vị trí/địa chỉ → cung cấp địa chỉ chính xác nhất có thể.
+3. Nếu hỏi về giới thiệu → tóm tắt ngắn gọn (3-5 câu).
+4. Sử dụng Markdown, tiếng Việt chuyên nghiệp.
+5. Ở cuối, đề xuất 2-3 câu hỏi về điểm chuẩn, ngành học MÀ HỆ THỐNG CÓ DỮ LIỆU."""
+
+        general_prefix = (
+            f"**[Recommender Agent]** — Trường: **{truong}**\n\n"
+        )
+        general_suffix = (
+            f"\n\n---\n"
+            f"*⚠️ Thông tin trên được lấy từ kiến thức chung của AI, không phải từ database chính thức. "
+            f"Vui lòng xác minh tại website chính thức của trường.*"
+        )
+
+        print(f"DEBUG [Recommender]: General info fallback for '{truong}' — query about general info")
+
+        if stream_output:
+            return _stream_llm_response(
+                prefix=general_prefix,
+                messages=[{"role": "user", "content": general_prompt}],
+                temperature=0.3,
+                max_tokens=1500,
+                suffix=general_suffix,
+            )
+
+        general_answer, general_error = call_llm(
+            messages=[{"role": "user", "content": general_prompt}],
+            model_list=OPENROUTER_FALLBACK_MODELS,
+            temperature=0.3,
+            max_tokens=1500,
+        )
+        if general_answer:
+            return f"{general_prefix}{general_answer}{general_suffix}"
 
     # ======== BƯỚC 2: PANDAS DATA ENGINE TÌM KIẾM (LỚP 2 - FALLBACK OCR) ========
     filtered_df = df_tuyensinh.copy()
@@ -779,7 +998,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
     # Lọc theo trường bằng Token Scoring
     if truong != "ALL":
         list_of_all_schools = filtered_df['Tên Trường'].dropna().unique().tolist()
-        matched_ocr = find_matching_schools(truong, list_of_all_schools)
+        matched_ocr = find_matching_schools(truong, list_of_all_schools, location=pre_extracted_location)
 
         if matched_ocr:
             filtered_df = filtered_df[filtered_df['Tên Trường'].isin(matched_ocr)]
@@ -832,6 +1051,14 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
             filtered_df = filtered_df.iloc[context_indices]
 
     # ======== BƯỚC 2.5: SMART OCR CLEANER (LÀM SẠCH, KHÔNG PARSE) ========
+    if filtered_df.empty:
+        print(f"DEBUG [Recommender]: filtered_df is empty, returning early to prevent LLM hallucination.")
+        if truong != "ALL":
+            msg = f"Xin lỗi, hiện tại hệ thống chưa có dữ liệu của trường **{truong}**."
+        else:
+            msg = f"Xin lỗi, không tìm thấy dữ liệu nào phù hợp với yêu cầu của bạn."
+        return f"**[Recommender Agent]**\n\n{msg}\n\n👉 Vui lòng kiểm tra lại từ khóa hoặc thử một câu hỏi khác nhé!"
+
     context_data = clean_ocr_for_llm(filtered_df)
 
     # Giới hạn token
@@ -839,7 +1066,7 @@ QUY TẮC TRẢ LỜI (TUÂN THỦ TUYỆT ĐỐI):
         context_data = context_data[:5000] + "\n...[Dữ liệu bị lược bỏ do giới hạn Token]...\n" + context_data[-5000:]
 
     # ======== BƯỚC 3: LLM SYNTHESIS (PROMPT CỨNG - ĐA DẠNG FORMAT) ========
-    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. Trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới.
+    answer_prompt = f"""Bạn là CHUYÊN GIA TƯ VẤN TUYỂN SINH. CHỈ trả lời câu hỏi dựa HOÀN TOÀN trên DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG dùng kiến thức riêng.
 
 CÂU HỎI: "{user_query}"
 
@@ -855,21 +1082,20 @@ CÁCH ĐỌC ĐÚNG:
 3. ĐIỂM TRÚNG TUYỂN thường là cột CUỐI CÙNG trong mỗi nhóm (Năm 2024, Năm 2023).
 
 QUY TẮC OUTPUT BẮT BUỘC:
-1. Trả lời CHÍNH XÁC trọng tâm câu hỏi. TUYỆT ĐỐI không đưa thông tin thừa. Nếu người dùng hỏi một ngành cụ thể, CHỈ trả lời về ngành đó, không liệt kê tất cả các ngành. Nếu người dùng hỏi chung chung về điểm chuẩn, thì mới liệt kê dưới dạng BẢNG MARKDOWN.
-2. KHÔNG viết bài luận, KHÔNG quảng cáo trường, KHÔNG bịa thông tin.
-3. Cấu trúc bảng (nếu cần dùng bảng): | Mã ngành | Tên ngành | Phương thức | Điểm chuẩn | Chỉ tiêu |
-4. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Hãy ưu tiên báo cáo số liệu của năm {nam}. Nếu không có năm {nam}, hãy CẢNH BÁO rõ là không có và báo cáo năm gần nhất.' if nam > 0 else ''}
-5. Nếu KHÔNG tìm thấy dữ liệu điểm: Trả lời "Không tìm thấy dữ liệu điểm trúng tuyển."
-6. Câu hỏi về thông tin chung (vị trí, học phí): Được dùng kiến thức chung, trả lời ngắn gọn.
-7. Ở cuối, đề xuất 2-3 câu hỏi liên quan MÀ HỆ THỐNG CÓ DỮ LIỆU để trả lời.
-
+1. CHỈ trả lời DỰA TRÊN DỮ LIỆU bên dưới. TUYỆT ĐỐI KHÔNG suy luận, KHÔNG dùng kiến thức riêng, KHÔNG bịa số liệu.
+2. Trả lời CHÍNH XÁC trọng tâm câu hỏi. Nếu hỏi một ngành → CHỈ trả lời về ngành đó. Nếu hỏi chung → BẢNG MARKDOWN.
+3. Khi trích dẫn số liệu (điểm, chỉ tiêu), GHI ĐÚNG con số từ dữ liệu gốc.
+4. KHÔNG viết bài luận, KHÔNG quảng cáo trường.
+5. Nếu dữ liệu có nhiều năm (2023, 2024), ghi rõ năm nào. {f'ĐẶC BIỆT LƯU Ý: Người dùng đang muốn tìm năm {nam}. Ưu tiên số liệu năm {nam}. Nếu không có năm {nam}, CẢNH BÁO rõ và báo cáo năm gần nhất.' if nam > 0 else ''}
+6. Nếu dữ liệu KHÔNG CHỨA thông tin user hỏi → nói rõ: "Dữ liệu hiện tại không có thông tin về [chủ đề]."
+7. Ở cuối, đề xuất 2-3 câu hỏi gợi ý CỤ THỂ mà hệ thống có dữ liệu, PHÙ HỢP với nhu cầu ban đầu.
 
 DỮ LIỆU:
 {context_data}"""
 
     if stream_output:
         return _stream_llm_response(
-            prefix="🤖 **[Recommender Agent]**\n\n",
+            prefix="**[Recommender Agent]**\n\n",
             messages=[{"role": "user", "content": answer_prompt}],
             temperature=0.1,
         )
@@ -880,14 +1106,15 @@ DỮ LIỆU:
         temperature=0.1,
     )
     if answer_res:
-        return f"🤖 **[Recommender Agent]**\n\n{answer_res}"
-    return f"🤖 **[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
+        return f"**[Recommender Agent]**\n\n{answer_res}"
+    return f"**[Recommender Agent]**\n\n{error_info['message'] if error_info else '⚠️ Hệ thống AI tạm thời không khả dụng. Vui lòng thử lại sau.'}"
 
 
-def query_diem_chuan_stream(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0):
+def query_diem_chuan_stream(user_query: str, pre_extracted_school: str = "ALL", pre_extracted_location: str = "ALL", pre_extracted_keyword: str = "ALL", pre_extracted_year: int = 0):
     return query_diem_chuan(
         user_query=user_query,
         pre_extracted_school=pre_extracted_school,
+        pre_extracted_location=pre_extracted_location,
         pre_extracted_keyword=pre_extracted_keyword,
         pre_extracted_year=pre_extracted_year,
         stream_output=True,

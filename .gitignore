@@ -4,11 +4,18 @@
 # ============================================================
 
 # === DATA & DATABASE (THÔNG TIN BẢO MẬT — TUYỆT ĐỐI KHÔNG PUSH) ===
+data/**/*.csv
+data/**/*.xlsx
+data/**/*.pdf
+data/**/*.json
+data/**/*.db
 data/*.csv
 data/*.xlsx
 data/*.pdf
 data/*.json
 data/*.db
+data/backups/
+chat_history.db
 data/1.*/
 data/2.*/
 data/3.*/
@@ -36,6 +43,7 @@ SKILL.md
 # === DEBUG & TEMP FILES ===
 debug_*.jpg
 debug_*.png
+logs/
 /test_*.py
 !tests/
 !tests/**
